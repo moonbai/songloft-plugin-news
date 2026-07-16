@@ -1,60 +1,57 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.createDirectHandlers = createDirectHandlers;
-const facade_1 = require("../musicSdk/facade");
-const response_1 = require("./response");
-const platformModules = { kw: facade_1.kw, kg: facade_1.kg, tx: facade_1.tx, wy: facade_1.wy, mg: facade_1.mg };
-function createDirectHandlers(runtimeManager) {
-    return {
-        async getMusicUrl(req) {
-            try {
-                const body = req.body;
-                if (!body)
-                    return (0, response_1.badRequestResponse)('No body provided');
-                const content = Array.from(body).map(b => String.fromCharCode(b)).join('');
-                const parsed = JSON.parse(content);
-                const songInfo = parsed.songInfo;
-                const quality = String(parsed.quality || 'standard');
-                if (!songInfo || !songInfo.platform)
-                    return (0, response_1.badRequestResponse)('songInfo is required');
-                const url = await runtimeManager.getMusicUrl(songInfo, quality);
-                if (url) {
-                    return (0, response_1.successResponse)({ url });
-                }
-                else {
-                    return (0, response_1.errorResponse)('Failed to get music URL');
-                }
+// handlers/direct.ts - Direct 端点
+import { platformModules } from '../musicSdk/facade';
+import { success, error, badRequest } from './response';
+/** POST /api/direct/music/url — 直接解析 URL */
+export function createDirectMusicUrlHandler(runtimeManager) {
+    return async (req) => {
+        try {
+            if (!req.body)
+                return badRequest('No body');
+            const text = new TextDecoder().decode(req.body);
+            const parsed = JSON.parse(text);
+            const songInfo = parsed.songInfo;
+            const quality = String(parsed.quality || 'standard');
+            if (!songInfo || !songInfo.platform)
+                return badRequest('songInfo is required');
+            const result = await runtimeManager.getMusicUrl(songInfo, quality);
+            if (result) {
+                return success({ url: result.url, headers: result.headers || {} });
             }
-            catch (e) {
-                return (0, response_1.errorResponse)('Failed to get music URL');
+            return error('No URL resolved', 404);
+        }
+        catch (e) {
+            return error('Failed: ' + e.message);
+        }
+    };
+}
+/** GET /api/direct/lyric — 获取歌词 */
+export function createDirectLyricHandler() {
+    return async (req) => {
+        try {
+            const q = req.query || {};
+            const sourceId = q.source_id || 'kw';
+            const musicId = q.musicId;
+            const songmid = q.songmid;
+            if (!musicId && !songmid)
+                return badRequest('musicId or songmid is required');
+            const mod = platformModules[sourceId];
+            if (!mod)
+                return badRequest('Unknown source');
+            const songInfo = {
+                platform: sourceId,
+                name: '',
+                singer: '',
+                musicId: musicId || songmid || '',
+                songmid: songmid || musicId || '',
+            };
+            const result = await mod.getLyric(songInfo);
+            if (result) {
+                return success(result);
             }
-        },
-        async getLyric(req) {
-            try {
-                const query = req.query;
-                const source_id = query.source_id || 'kw';
-                const musicId = query.musicId;
-                const songmid = query.songmid;
-                if (!musicId && !songmid)
-                    return (0, response_1.badRequestResponse)('musicId or songmid is required');
-                const module = platformModules[source_id];
-                if (!module)
-                    return (0, response_1.badRequestResponse)('Unknown source');
-                const result = await module.getLyric({
-                    platform: source_id,
-                    musicId: musicId || songmid || '',
-                    songmid: songmid || musicId || '',
-                });
-                if (result) {
-                    return (0, response_1.successResponse)(result);
-                }
-                else {
-                    return (0, response_1.successResponse)({ lyric: '' });
-                }
-            }
-            catch (e) {
-                return (0, response_1.errorResponse)('Failed to get lyric');
-            }
-        },
+            return success({ lyric: '' });
+        }
+        catch (e) {
+            return error('Failed: ' + e.message);
+        }
     };
 }

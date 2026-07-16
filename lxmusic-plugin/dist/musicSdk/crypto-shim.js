@@ -1,102 +1,125 @@
-"use strict";
-// 加密适配层 - 收敛所有加密调用
-// 宿主提供的 crypto polyfill + CryptoJS
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.md5 = md5;
-exports.aesEncrypt = aesEncrypt;
-exports.aesDecrypt = aesDecrypt;
-exports.rsaEncrypt = rsaEncrypt;
-exports.randomBytes = randomBytes;
-exports.base64Encode = base64Encode;
-exports.base64Decode = base64Decode;
-exports.stringToBytes = stringToBytes;
-exports.bytesToString = bytesToString;
-exports.hmacSha1 = hmacSha1;
-exports.sha256 = sha256;
-exports.hexEncode = hexEncode;
-exports.hexDecode = hexDecode;
-const crypto_js_1 = __importDefault(require("crypto-js"));
-// MD5 哈希
-function md5(data) {
+// musicSdk/crypto-shim.ts - 加密适配层
+// 收敛所有加密调用:宿主 polyfill + 纯 JS CryptoJS
+// 平台代码统一 import 它
+import CryptoJS from 'crypto-js';
+// ============ MD5 ============
+export function md5(data) {
+    // 优先用宿主 polyfill
     try {
-        return crypto.md5(data);
+        if (typeof crypto !== 'undefined' && crypto.md5) {
+            return crypto.md5(data);
+        }
     }
-    catch {
-        return crypto_js_1.default.MD5(data).toString();
-    }
+    catch { /* fallback */ }
+    return CryptoJS.MD5(data).toString();
 }
-// AES 加密 (CBC 模式)
-function aesEncrypt(data, key, iv) {
+// ============ SHA256 ============
+export function sha256(data) {
+    return CryptoJS.SHA256(data).toString();
+}
+export function sha1(data) {
+    return CryptoJS.SHA1(data).toString();
+}
+// ============ HMAC ============
+export function hmacSHA256(data, key) {
+    return CryptoJS.HmacSHA256(data, key).toString();
+}
+export function hmacSHA1(data, key) {
+    return CryptoJS.HmacSHA1(data, key).toString();
+}
+export function hmacMD5(data, key) {
+    return CryptoJS.HmacMD5(data, key).toString();
+}
+// ============ AES ============
+export function aesEncrypt(data, key, iv, mode) {
+    // 尝试宿主 polyfill
     try {
-        return crypto.aesEncrypt(data, key, iv);
+        if (typeof crypto !== 'undefined' && crypto.aesEncrypt) {
+            const modeStr = mode ? mode.toLowerCase() : 'cbc';
+            return crypto.aesEncrypt(data, key, iv, modeStr);
+        }
     }
-    catch {
-        const k = crypto_js_1.default.enc.Utf8.parse(key);
-        const i = crypto_js_1.default.enc.Utf8.parse(iv);
-        const encrypted = crypto_js_1.default.AES.encrypt(data, k, {
-            iv: i,
-            mode: crypto_js_1.default.mode.CBC,
-            padding: crypto_js_1.default.pad.Pkcs7,
-        });
-        return encrypted.toString();
-    }
-}
-// AES 解密
-function aesDecrypt(data, key, iv) {
-    const k = crypto_js_1.default.enc.Utf8.parse(key);
-    const i = crypto_js_1.default.enc.Utf8.parse(iv);
-    const decrypted = crypto_js_1.default.AES.decrypt(data, k, {
-        iv: i,
-        mode: crypto_js_1.default.mode.CBC,
-        padding: crypto_js_1.default.pad.Pkcs7,
+    catch { /* fallback */ }
+    const keyWords = CryptoJS.enc.Utf8.parse(key);
+    const ivWords = iv ? CryptoJS.enc.Utf8.parse(iv) : undefined;
+    const modeName = mode ? CryptoJS.mode[mode] : CryptoJS.mode.CBC;
+    const encrypted = CryptoJS.AES.encrypt(data, keyWords, {
+        iv: ivWords,
+        mode: modeName,
+        padding: CryptoJS.pad.Pkcs7,
     });
-    return decrypted.toString(crypto_js_1.default.enc.Utf8);
+    return encrypted.toString(); // base64
 }
-// RSA 加密
-function rsaEncrypt(data, publicKey) {
-    return crypto.rsaEncrypt(data, publicKey);
-}
-// 随机字节
-function randomBytes(length) {
-    return crypto.randomBytes(length);
-}
-// Base64 编码
-function base64Encode(data) {
-    return crypto_js_1.default.enc.Base64.stringify(crypto_js_1.default.enc.Utf8.parse(data));
-}
-// Base64 解码
-function base64Decode(data) {
-    return crypto_js_1.default.enc.Base64.parse(data).toString(crypto_js_1.default.enc.Utf8);
-}
-// 字符串转字节数组
-function stringToBytes(str) {
-    return new Uint8Array(str.split('').map(c => c.charCodeAt(0)));
-}
-// 字节数组转字符串
-function bytesToString(bytes) {
-    return String.fromCharCode(...Array.from(bytes));
-}
-// HMAC-SHA1
-function hmacSha1(data, key) {
-    return crypto_js_1.default.HmacSHA1(data, key).toString();
-}
-// SHA256
-function sha256(data) {
-    return crypto_js_1.default.SHA256(data).toString();
-}
-// Hex 编解码
-function hexEncode(bytes) {
-    return Array.from(bytes)
-        .map(b => b.toString(16).padStart(2, '0'))
-        .join('');
-}
-function hexDecode(hex) {
-    const bytes = new Uint8Array(hex.length / 2);
-    for (let i = 0; i < bytes.length; i++) {
-        bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
+export function aesDecrypt(data, key, iv, mode) {
+    // 尝试宿主 polyfill
+    try {
+        if (typeof crypto !== 'undefined' && crypto.aesDecrypt) {
+            const modeStr = mode ? mode.toLowerCase() : 'cbc';
+            return crypto.aesDecrypt(data, key, iv, modeStr);
+        }
     }
-    return bytes;
+    catch { /* fallback */ }
+    const keyWords = CryptoJS.enc.Utf8.parse(key);
+    const ivWords = iv ? CryptoJS.enc.Utf8.parse(iv) : undefined;
+    const modeName = mode ? CryptoJS.mode[mode] : CryptoJS.mode.CBC;
+    const decrypted = CryptoJS.AES.decrypt(data, keyWords, {
+        iv: ivWords,
+        mode: modeName,
+        padding: CryptoJS.pad.Pkcs7,
+    });
+    return decrypted.toString(CryptoJS.enc.Utf8);
 }
+// ============ RSA ============
+export function rsaEncrypt(data, publicKey) {
+    // 宿主 polyfill
+    try {
+        if (typeof crypto !== 'undefined' && crypto.rsaEncrypt) {
+            return crypto.rsaEncrypt(data, publicKey);
+        }
+    }
+    catch { /* fallback */ }
+    // CryptoJS 不直接支持 RSA,必须依赖宿主
+    throw new Error('RSA encrypt requires host crypto polyfill');
+}
+// ============ Base64 ============
+export function base64Encode(data) {
+    return CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(data));
+}
+export function base64Decode(data) {
+    return CryptoJS.enc.Base64.parse(data).toString(CryptoJS.enc.Utf8);
+}
+// ============ Hex ============
+export function hexEncode(data) {
+    return CryptoJS.enc.Hex.stringify(CryptoJS.enc.Utf8.parse(data));
+}
+export function hexDecode(data) {
+    return CryptoJS.enc.Hex.parse(data).toString(CryptoJS.enc.Utf8);
+}
+// ============ Random ============
+export function randomBytes(length) {
+    // 尝试宿主 polyfill
+    try {
+        if (typeof crypto !== 'undefined' && crypto.randomBytes) {
+            const hex = crypto.randomBytes(length);
+            const arr = new Uint8Array(length);
+            for (let i = 0; i < length; i++) {
+                arr[i] = parseInt(hex.substr(i * 2, 2), 16);
+            }
+            return arr;
+        }
+    }
+    catch { /* fallback */ }
+    // CryptoJS random
+    const words = CryptoJS.lib.WordArray.random(length);
+    const arr = new Uint8Array(length);
+    for (let i = 0; i < length; i++) {
+        arr[i] = (words.words[i >>> 2] >>> (24 - (i % 4) * 8)) & 0xff;
+    }
+    return arr;
+}
+export function randomHex(length) {
+    const bytes = randomBytes(length);
+    return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+// ============ 导出 CryptoJS 供直接使用 ============
+export { CryptoJS };

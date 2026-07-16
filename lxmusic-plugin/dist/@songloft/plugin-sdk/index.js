@@ -1,86 +1,148 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.createRouter = createRouter;
-exports.createSearchHandler = createSearchHandler;
-exports.createMusicUrlHandler = createMusicUrlHandler;
-exports.jsonResponse = jsonResponse;
-exports.parseQuery = parseQuery;
-function createRouter() {
+// @songloft/plugin-sdk - 宿主契约 SDK (本地实现)
+// 仅包含路由/响应/handler 工厂,不含音乐能力
+export function createRouter() {
     const routes = [];
-    return {
-        get(path, handler) {
-            routes.push({ method: 'GET', path, handler });
-        },
-        post(path, handler) {
-            routes.push({ method: 'POST', path, handler });
-        },
-        put(path, handler) {
-            routes.push({ method: 'PUT', path, handler });
-        },
-        delete(path, handler) {
-            routes.push({ method: 'DELETE', path, handler });
-        },
-        handle(req) {
-            const request = req;
-            const route = routes.find(r => r.method === request.method && r.path === request.path);
-            if (route) {
-                return route.handler(request);
+    const compilePath = (path) => {
+        const paramNames = [];
+        const regexStr = path.replace(/:[a-zA-Z_][a-zA-Z0-9_]*/g, (match) => {
+            paramNames.push(match.slice(1));
+            return '([^/]+)';
+        });
+        return {
+            pattern: new RegExp('^' + regexStr + '$'),
+            paramNames,
+            isPattern: path.includes(':'),
+        };
+    };
+    const matchRoute = (method, path) => {
+        for (const route of routes) {
+            if (route.method !== method && route.method !== 'ALL')
+                continue;
+            if (route.isPattern && route.pattern) {
+                const match = path.match(route.pattern);
+                if (match) {
+                    const params = {};
+                    route.paramNames?.forEach((name, i) => {
+                        params[name] = decodeURIComponent(match[i + 1]);
+                    });
+                    return { handler: route.handler, params };
+                }
             }
-            return undefined;
+            else if (route.path === path) {
+                return { handler: route.handler, params: {} };
+            }
+        }
+        return null;
+    };
+    return {
+        get(path, handler) { const c = compilePath(path); routes.push({ method: 'GET', path, handler, ...c }); },
+        post(path, handler) { const c = compilePath(path); routes.push({ method: 'POST', path, handler, ...c }); },
+        put(path, handler) { const c = compilePath(path); routes.push({ method: 'PUT', path, handler, ...c }); },
+        delete(path, handler) { const c = compilePath(path); routes.push({ method: 'DELETE', path, handler, ...c }); },
+        handle(req) {
+            const r = req;
+            const method = String(r.method || 'GET').toUpperCase();
+            const path = String(r.path || '');
+            const matched = matchRoute(method, path);
+            if (!matched)
+                return null;
+            const request = {
+                method,
+                path,
+                query: { ...(r.query || {}), ...matched.params },
+                headers: r.headers || {},
+                body: r.body || null,
+            };
+            return matched.handler(request);
         },
     };
 }
-function createSearchHandler(options) {
+export function jsonResponse(body, status = 200) {
+    return {
+        statusCode: status,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    };
+}
+export function parseQuery(q) {
+    const result = {};
+    if (!q)
+        return result;
+    const pairs = q.startsWith('?') ? q.slice(1).split('&') : q.split('&');
+    for (const pair of pairs) {
+        const [key, val] = pair.split('=');
+        if (key)
+            result[decodeURIComponent(key)] = decodeURIComponent(val || '');
+    }
+    return result;
+}
+export function createSearchHandler(opts) {
     return async (req) => {
         try {
-            const body = req.body ? Array.from(req.body).map(b => String.fromCharCode(b)).join('') : '{}';
-            const params = JSON.parse(body);
-            const result = await options.search(params);
+            let params;
+            if (req.body) {
+                const text = typeof req.body === 'string' ? req.body : new TextDecoder().decode(req.body);
+                const parsed = JSON.parse(text);
+                params = {
+                    keyword: String(parsed.keyword || ''),
+                    source_id: String(parsed.source_id || 'kw'),
+                    quality: String(parsed.quality || 'standard'),
+                    page: Number(parsed.page) || 1,
+                    page_size: Number(parsed.page_size) || 20,
+                };
+            }
+            else {
+                params = {
+                    keyword: req.query.keyword || '',
+                    source_id: req.query.source_id || 'kw',
+                    quality: req.query.quality || 'standard',
+                    page: Number(req.query.page) || 1,
+                    page_size: Number(req.query.page_size) || 20,
+                };
+            }
+            const result = await opts.search(params);
+            // 主程序契约:返回裸 {results}
             return jsonResponse(result);
         }
-        catch {
+        catch (e) {
+            songloft.log.error('Search handler error:', e);
             return jsonResponse({ results: [] });
         }
     };
 }
-function createMusicUrlHandler(options) {
+export function createMusicUrlHandler(opts) {
     return async (req) => {
         try {
-            const body = req.body ? Array.from(req.body).map(b => String.fromCharCode(b)).join('') : '{}';
-            const params = JSON.parse(body);
-            const urlResult = await options.resolveUrl(params.source_data);
-            if (urlResult) {
-                return jsonResponse(urlResult);
+            let source_data;
+            let hint;
+            if (req.body) {
+                const text = typeof req.body === 'string' ? req.body : new TextDecoder().decode(req.body);
+                const parsed = JSON.parse(text);
+                source_data = parsed.source_data;
+                hint = parsed.hint;
             }
-            if (options.fallbackSearch && params.fallback_hint?.enabled) {
-                const fallback = await options.fallbackSearch(params.fallback_hint);
-                if (fallback) {
-                    return jsonResponse({ fallback_match: fallback });
+            else {
+                source_data = req.query.source_data ? JSON.parse(req.query.source_data) : null;
+                hint = req.query.hint ? JSON.parse(req.query.hint) : undefined;
+            }
+            // 先尝试主源解析
+            let result = await opts.resolveUrl(source_data);
+            // 主源失败且启用 fallback 时跨平台搜索
+            if (!result && hint && hint.enabled && opts.fallbackSearch) {
+                const match = await opts.fallbackSearch(hint);
+                if (match) {
+                    result = await opts.resolveUrl(match.source_data);
                 }
             }
-            return jsonResponse({ error: 'No URL found' }, 404);
+            if (result) {
+                // 主程序契约:返回裸 {url} 或 {url, headers}
+                return jsonResponse(result);
+            }
+            return jsonResponse({ url: '' }, 404);
         }
-        catch {
-            return jsonResponse({ error: 'Internal error' }, 500);
+        catch (e) {
+            songloft.log.error('Music URL handler error:', e);
+            return jsonResponse({ url: '' }, 500);
         }
     };
-}
-function jsonResponse(body, status = 200) {
-    const json = typeof body === 'string' ? body : JSON.stringify(body);
-    return {
-        statusCode: status,
-        headers: { 'Content-Type': 'application/json; charset=utf-8' },
-        body: new Uint8Array(json.split('').map(c => c.charCodeAt(0))),
-    };
-}
-function parseQuery(q) {
-    const result = {};
-    const pairs = q.split('&');
-    for (const pair of pairs) {
-        const [key, value] = pair.split('=');
-        if (key) {
-            result[key] = value ? decodeURIComponent(value) : '';
-        }
-    }
-    return result;
 }

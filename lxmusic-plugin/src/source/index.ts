@@ -1,4 +1,6 @@
+// source/index.ts - 音源管理模块导出
+
 export { SourceManager } from './manager';
-export { getStoredSources, setStoredSources, getStoredSource, saveStoredSource, deleteStoredSource } from './storage';
-export { parseJsSource, parseZipSource } from './parser';
-export type { CustomSource } from '../types';
+export { SourceStorage } from './storage';
+export { parseScriptMetadata, slugify, parseZip, parseMultipart, latin1ToUtf8 } from './parser';
+export type { ImportedSource, SourceMetadata, ZipEntry, BatchImportState, ImportResult } from './types';

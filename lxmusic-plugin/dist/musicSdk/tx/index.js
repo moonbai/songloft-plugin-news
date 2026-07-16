@@ -1,77 +1,249 @@
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
+// musicSdk/tx/index.ts - QQ 音乐 (QQ音乐) 平台模块
+// 运行于 QuickJS 沙箱,仅可用 fetch / setTimeout / Buffer / crypto / zlib / songloft.*
+// 不使用任何 node.js API,不使用 require
+import { httpFetch } from '../request';
+import { base64Decode } from '../crypto-shim';
+const platform = 'tx';
+const MUSIC_U_URL = 'https://u.y.qq.com/cgi-bin/musicu.fcg';
+const LYRIC_URL = 'https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg';
+const REQ_HEADERS = {
+    'Content-Type': 'application/json',
+    'User-Agent': 'Mozilla/5.0',
+    'Referer': 'https://y.qq.com/',
 };
-Object.defineProperty(exports, "__esModule", { value: true });
-const request_1 = __importDefault(require("../request"));
-function normalizeSong(song) {
+/** 通用 musicu.fcg POST 请求 (body 为对象,顶层每个 key 即一个模块请求) */
+async function musicuRequest(body, timeout = 15000) {
+    const { promise } = httpFetch(MUSIC_U_URL, {
+        method: 'POST',
+        headers: REQ_HEADERS,
+        body,
+        timeout,
+    });
+    const resp = await promise;
+    if (resp.statusCode !== 200) {
+        throw new Error(`tx musicu request failed: ${resp.statusCode}`);
+    }
+    return resp.body;
+}
+/** 将 QQ 音乐歌曲对象映射为 SongInfo (兼容搜索/榜单/歌单字段命名差异) */
+function mapSong(raw) {
+    if (!raw)
+        return null;
+    const singersRaw = raw.singer || raw.artists || [];
+    const singers = Array.isArray(singersRaw) ? singersRaw : [];
+    const album = raw.album || {};
+    const file = raw.file || {};
+    const name = raw.name || raw.songname || raw.title || '';
+    if (!name)
+        return null;
+    const interval = Number(raw.interval ?? raw.duration ?? 0);
     return {
-        name: String(song.name || song.songName || ''),
-        singer: String(song.singer || song.artist || song.albumArtist || ''),
-        album: String(song.album || song.albumName || ''),
-        duration: Number(song.duration || song.interval || 0),
-        musicId: String(song.musicId || song.songId || song.id || ''),
-        songmid: String(song.songmid || song.musicId || song.songId || ''),
-        hash: String(song.hash || ''),
-        platform: 'tx',
+        platform,
+        name,
+        singer: singers.map((s) => s.name).filter(Boolean).join(' / '),
+        album: album.name || raw.albumname || '',
+        duration: interval > 0 ? interval : undefined,
+        songmid: raw.mid || raw.songmid || '',
+        musicId: String(raw.id ?? raw.songid ?? ''),
+        strMediaMid: file.media_mid || raw.strMediaMid || '',
+        albumMid: album.mid || raw.albummid || '',
     };
 }
-const musicSearch = {
-    async search(keyword, page, limit) {
-        const url = `https://c.y.qq.com/soso/fcgi-bin/client_search_cp?w=${encodeURIComponent(keyword)}&p=${page}&n=${limit}&format=json`;
-        const { body } = await (0, request_1.default)(url).promise;
-        const data = body;
-        const songs = (data.data?.song || []).map(normalizeSong);
-        return { songs, total: Number(data.data?.totalnum || songs.length) };
-    },
-};
+// ============ 搜索 ============
+async function search(keyword, page, limit) {
+    const key = 'music.Search.SearchCgiService';
+    const body = {
+        [key]: {
+            module: 'music.search.SearchCgiService',
+            method: 'DoSearchForQQMusicDesktop',
+            param: {
+                query: keyword,
+                page_num: page,
+                num_per_page: limit,
+                search_type: 0,
+            },
+        },
+    };
+    const data = await musicuRequest(body);
+    const songData = data?.[key]?.data?.body?.song;
+    const list = songData?.list || [];
+    const total = Number(songData?.total_song_num ?? list.length) || 0;
+    const songs = [];
+    for (const raw of list) {
+        const info = mapSong(raw);
+        if (info)
+            songs.push(info);
+    }
+    return { songs, total, source: platform };
+}
+// ============ 歌词 ============
 async function getLyric(songInfo) {
-    const songmid = songInfo.songmid || songInfo.musicId;
+    const songmid = songInfo.songmid || songInfo.musicId || '';
     if (!songmid)
         return null;
-    const url = `https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg?songmid=${songmid}&format=json`;
-    const { body } = await (0, request_1.default)(url).promise;
-    const data = body;
-    if (data && typeof data === 'object') {
-        return {
-            lyric: String(data.lyric || data.data || ''),
-        };
+    const timestamp = Date.now();
+    const url = `${LYRIC_URL}?songmid=${encodeURIComponent(songmid)}` +
+        `&pcachetime=${timestamp}&g_tk=5381&format=json&inCharset=utf8&outCharset=utf-8`;
+    const { promise } = httpFetch(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://y.qq.com/' },
+        timeout: 15000,
+    });
+    const resp = await promise;
+    if (resp.statusCode !== 200)
+        return null;
+    const data = resp.body;
+    const lyricB64 = data?.lyric;
+    const transB64 = data?.trans || data?.transname;
+    let lyric = '';
+    let tlyric = '';
+    try {
+        if (lyricB64)
+            lyric = base64Decode(lyricB64);
     }
-    return null;
+    catch { /* base64 解码失败则忽略 */ }
+    try {
+        if (transB64)
+            tlyric = base64Decode(transB64);
+    }
+    catch { /* 翻译解码失败则忽略 */ }
+    if (!lyric)
+        return null;
+    const result = { lyric };
+    if (tlyric)
+        result.tlyric = tlyric;
+    return result;
 }
-const songList = {
-    async tags() {
-        return [];
-    },
-    async list(tag, page, limit) {
-        return { playlists: [] };
-    },
-    async detail(id) {
-        const url = `https://c.y.qq.com/qzone/fcg-bin/fcg_ucc_getcdinfo_byids_cp.fcg?type=1&json=1&utf8=1&onlysong=0&disstid=${id}`;
-        const { body } = await (0, request_1.default)(url).promise;
-        const data = body;
-        const songs = ((data.cdlist || [])[0]?.songlist || []).map(normalizeSong);
-        return { songs };
-    },
-    async search(keyword, page, limit) {
-        return { playlists: [] };
-    },
-    async sorts() {
-        return [];
-    },
-};
-const leaderboard = {
-    async boards() {
-        return { boards: [] };
-    },
-    async list(id, page, limit) {
-        return { songs: [] };
-    },
-};
+// ============ 歌单 ============
+/** 歌单分类标签 */
+async function getSongListTags() {
+    const body = {
+        comm: { ct: 24 },
+        recomPlaylist: { method: 'get_playlist_category', param: {} },
+    };
+    const data = await musicuRequest(body);
+    return data?.recomPlaylist?.data || data?.recomPlaylist || [];
+}
+/** 按分类获取歌单列表 */
+async function getSongListList(tag, page, limit) {
+    const tagId = Number(tag) || 10000000; // 10000000 = 热门
+    const body = {
+        comm: { ct: 24 },
+        playlist: {
+            method: 'get_playlist_by_category',
+            param: {
+                id: tagId,
+                curPage: page - 1,
+                size: limit,
+            },
+        },
+    };
+    const data = await musicuRequest(body);
+    const plData = data?.playlist?.data;
+    const arr = plData?.v_playlist || [];
+    const total = Number(plData?.total ?? plData?.total_song_num ?? arr.length) || arr.length;
+    const list = arr.map((item) => ({
+        id: String(item.dirId ?? item.dirid ?? item.dissid ?? item.tid ?? ''),
+        name: item.title || item.dirName || item.name || '',
+        cover: item.picurl || item.picUrl || item.imgurl || '',
+        author: item.creator?.name || item.creatorName || '',
+        total: Number(item.songNum ?? item.songnum ?? 0) || undefined,
+        playCount: '',
+    }));
+    return { list, total };
+}
+/** 获取歌单详情 (含歌曲列表) */
+async function getSongListDetail(id, page) {
+    const size = 100;
+    const begin = (page - 1) * size;
+    const body = {
+        comm: { ct: 24 },
+        playlist: {
+            method: 'get_playlist_info',
+            param: {
+                dirid: Number(id) || id,
+                song_num: size,
+                song_begin: begin,
+            },
+        },
+    };
+    const data = await musicuRequest(body);
+    const plData = data?.playlist?.data;
+    const dirinfo = plData?.dirinfo || {};
+    const songlist = plData?.songlist || [];
+    const list = [];
+    for (const raw of songlist) {
+        const info = mapSong(raw);
+        if (info)
+            list.push(info);
+    }
+    return {
+        info: {
+            id: String(dirinfo.id ?? dirinfo.dirId ?? id),
+            name: dirinfo.title || dirinfo.name || '',
+            cover: dirinfo.picurl || dirinfo.picUrl || '',
+            author: dirinfo.creator?.name || '',
+            desc: dirinfo.desc || '',
+            total: Number(dirinfo.songnum ?? songlist.length) || undefined,
+        },
+        list,
+    };
+}
+// ============ 排行榜 ============
+/** 获取所有排行榜 */
+async function getLeaderboardBoards() {
+    const body = {
+        comm: { ct: 24 },
+        topList: { module: 'musicTopList.TopListInfoServer', method: 'GetAllTop', param: {} },
+    };
+    const data = await musicuRequest(body);
+    const arr = data?.topList?.data?.List || [];
+    return arr.map((item) => ({
+        id: String(item.topId ?? item.topid ?? ''),
+        name: item.title || item.name || '',
+        cover: item.picUrl || item.picurl || '',
+        intro: item.intro || '',
+    }));
+}
+/** 获取排行榜歌曲列表 */
+async function getLeaderboardList(id, page, limit) {
+    const body = {
+        comm: { ct: 24 },
+        topList: {
+            module: 'musicTopList.TopListInfoServer',
+            method: 'GetDetail',
+            param: {
+                topId: String(id),
+                offset: (page - 1) * limit,
+                num: limit,
+            },
+        },
+    };
+    const data = await musicuRequest(body);
+    const td = data?.topList?.data;
+    const songInfoList = td?.songInfoList || td?.data?.songInfoList || td?.List || [];
+    const list = [];
+    for (const raw of songInfoList) {
+        // 榜单歌曲可能直接展开,也可能嵌套在 song 字段下
+        const info = mapSong(raw.song || raw);
+        if (info)
+            list.push(info);
+    }
+    const total = Number(td?.total ?? td?.song_total ?? list.length) || list.length;
+    return { list, total };
+}
+// ============ 模块导出 ============
 const tx = {
-    musicSearch,
+    musicSearch: { search },
     getLyric,
-    songList,
-    leaderboard,
+    songList: {
+        tags: getSongListTags,
+        list: getSongListList,
+        detail: getSongListDetail,
+    },
+    leaderboard: {
+        boards: getLeaderboardBoards,
+        list: getLeaderboardList,
+    },
 };
-exports.default = tx;
+export default tx;
+export { tx, search, getLyric, getSongListTags, getSongListList, getSongListDetail, getLeaderboardBoards, getLeaderboardList };

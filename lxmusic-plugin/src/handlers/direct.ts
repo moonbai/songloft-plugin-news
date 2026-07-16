@@ -1,62 +1,68 @@
+// handlers/direct.ts - Direct 端点
+
+import { platformModules } from '../musicSdk/facade';
+import { success, error, badRequest } from './response';
 import type { RuntimeManager } from '../engine';
-import { kw, kg, tx, wy, mg } from '../musicSdk/facade';
-import { successResponse, errorResponse, badRequestResponse } from './response';
+import type { RouteHandler } from '../@songloft/plugin-sdk';
+import type { SongInfo } from '../types';
 
-const platformModules: Record<string, any> = { kw, kg, tx, wy, mg };
+/** POST /api/direct/music/url — 直接解析 URL */
+export function createDirectMusicUrlHandler(runtimeManager: RuntimeManager): RouteHandler {
+  return async (req) => {
+    try {
+      if (!req.body) return badRequest('No body');
 
-export function createDirectHandlers(runtimeManager: RuntimeManager) {
-  return {
-    async getMusicUrl(req: unknown) {
-      try {
-        const body = (req as Record<string, unknown>).body as Uint8Array | null;
-        if (!body) return badRequestResponse('No body provided');
-        
-        const content = Array.from(body).map(b => String.fromCharCode(b)).join('');
-        const parsed = JSON.parse(content) as Record<string, unknown>;
-        
-        const songInfo = parsed.songInfo as Record<string, unknown>;
-        const quality = String(parsed.quality || 'standard');
-        
-        if (!songInfo || !songInfo.platform) return badRequestResponse('songInfo is required');
-        
-        const url = await runtimeManager.getMusicUrl(songInfo as any, quality);
-        
-        if (url) {
-          return successResponse({ url });
-        } else {
-          return errorResponse('Failed to get music URL');
-        }
-      } catch (e) {
-        return errorResponse('Failed to get music URL');
+      const text = new TextDecoder().decode(req.body);
+      const parsed = JSON.parse(text) as Record<string, unknown>;
+      const songInfo = parsed.songInfo as SongInfo;
+      const quality = String(parsed.quality || 'standard');
+
+      if (!songInfo || !songInfo.platform) return badRequest('songInfo is required');
+
+      const result = await runtimeManager.getMusicUrl(songInfo, quality);
+
+      if (result) {
+        return success({ url: result.url, headers: result.headers || {} });
       }
-    },
 
-    async getLyric(req: unknown) {
-      try {
-        const query = (req as Record<string, unknown>).query as Record<string, string>;
-        const source_id = query.source_id || 'kw';
-        const musicId = query.musicId;
-        const songmid = query.songmid;
-        
-        if (!musicId && !songmid) return badRequestResponse('musicId or songmid is required');
-        
-        const module = platformModules[source_id];
-        if (!module) return badRequestResponse('Unknown source');
-        
-        const result = await module.getLyric({
-          platform: source_id,
-          musicId: musicId || songmid || '',
-          songmid: songmid || musicId || '',
-        });
-        
-        if (result) {
-          return successResponse(result);
-        } else {
-          return successResponse({ lyric: '' });
-        }
-      } catch (e) {
-        return errorResponse('Failed to get lyric');
+      return error('No URL resolved', 404);
+    } catch (e) {
+      return error('Failed: ' + (e as Error).message);
+    }
+  };
+}
+
+/** GET /api/direct/lyric — 获取歌词 */
+export function createDirectLyricHandler(): RouteHandler {
+  return async (req) => {
+    try {
+      const q = req.query || {};
+      const sourceId = q.source_id || 'kw';
+      const musicId = q.musicId;
+      const songmid = q.songmid;
+
+      if (!musicId && !songmid) return badRequest('musicId or songmid is required');
+
+      const mod = platformModules[sourceId];
+      if (!mod) return badRequest('Unknown source');
+
+      const songInfo = {
+        platform: sourceId as SongInfo['platform'],
+        name: '',
+        singer: '',
+        musicId: musicId || songmid || '',
+        songmid: songmid || musicId || '',
+      } as SongInfo;
+
+      const result = await mod.getLyric(songInfo);
+
+      if (result) {
+        return success(result);
       }
-    },
+
+      return success({ lyric: '' });
+    } catch (e) {
+      return error('Failed: ' + (e as Error).message);
+    }
   };
 }

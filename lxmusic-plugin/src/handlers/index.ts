@@ -1,6 +1,3 @@
-export { createSearchHandlers } from './search';
-export { createSourceHandlers } from './source';
-export { createSongListHandlers } from './songlist';
-export { createLeaderboardHandlers } from './leaderboard';
-export { createDirectHandlers } from './direct';
-export { jsonResponse, successResponse, errorResponse, badRequestResponse } from './response';
+// handlers/index.ts - handler 模块导出
+
+export { success, error, badRequest, notFound, successWithWarning, jsonResponse } from './response';

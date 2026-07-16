@@ -1,45 +1,49 @@
-// 音源存储
+// source/storage.ts - 音源持久化
 
-import type { CustomSource } from '../types';
+import type { ImportedSource } from './types';
 
-const SOURCES_KEY = 'lxmusic_sources';
+const INDEX_KEY = 'source_index';
+const SCRIPT_PREFIX = 'source_script_';
 
-export function getStoredSources(): CustomSource[] {
-  try {
-    const raw = songloft.storage.get(SOURCES_KEY);
-    if (raw === null || raw === undefined) return [];
-    const rawStr = String(raw);
-    return JSON.parse(rawStr);
-  } catch {
-    return [];
+export class SourceStorage {
+  /** 加载索引 */
+  async loadIndex(): Promise<ImportedSource[]> {
+    try {
+      const data = await songloft.storage.get(INDEX_KEY);
+      if (!data) return [];
+      return JSON.parse(data) as ImportedSource[];
+    } catch {
+      return [];
+    }
   }
-}
 
-export function setStoredSources(sources: CustomSource[]): void {
-  try {
-    songloft.storage.set(SOURCES_KEY, JSON.stringify(sources));
-  } catch (e) {
-    songloft.log.error('Failed to save sources:', e);
+  /** 保存索引 */
+  async saveIndex(sources: ImportedSource[]): Promise<void> {
+    await songloft.storage.set(INDEX_KEY, JSON.stringify(sources));
   }
-}
 
-export function getStoredSource(id: string): CustomSource | null {
-  const sources = getStoredSources();
-  return sources.find(s => s.id === id) || null;
-}
-
-export function saveStoredSource(source: CustomSource): void {
-  const sources = getStoredSources();
-  const idx = sources.findIndex(s => s.id === source.id);
-  if (idx >= 0) {
-    sources[idx] = source;
-  } else {
-    sources.push(source);
+  /** 保存脚本 */
+  async saveScript(id: string, script: string): Promise<void> {
+    await songloft.storage.set(SCRIPT_PREFIX + id, script);
   }
-  setStoredSources(sources);
-}
 
-export function deleteStoredSource(id: string): void {
-  const sources = getStoredSources().filter(s => s.id !== id);
-  setStoredSources(sources);
+  /** 加载脚本 */
+  async loadScript(id: string): Promise<string | null> {
+    return songloft.storage.get(SCRIPT_PREFIX + id);
+  }
+
+  /** 删除脚本 */
+  async deleteScript(id: string): Promise<void> {
+    await songloft.storage.delete(SCRIPT_PREFIX + id);
+  }
+
+  /** 删除所有 */
+  async deleteAll(): Promise<void> {
+    const keys = await songloft.storage.keys();
+    for (const key of keys) {
+      if (key === INDEX_KEY || key.startsWith(SCRIPT_PREFIX)) {
+        await songloft.storage.delete(key);
+      }
+    }
+  }
 }

@@ -1,69 +1,105 @@
+// musicSdk/index.ts - 共享工具函数 (移植自 lxserver modules/utils/index.js)
+
+// ============ 全局兼容 ============
+// 混淆脚本/平台代码可能引用 global/window
+(globalThis as any).window = globalThis;
+(globalThis as any).global = globalThis;
+
+// ============ 格式化工具 ============
+
+/** 文件大小格式化 */
 export function sizeFormate(size: number): string {
-  if (size < 1024) return size + 'B';
-  if (size < 1024 * 1024) return (size / 1024).toFixed(2) + 'KB';
-  if (size < 1024 * 1024 * 1024) return (size / (1024 * 1024)).toFixed(2) + 'MB';
-  return (size / (1024 * 1024 * 1024)).toFixed(2) + 'GB';
+  if (size === undefined || size === null || isNaN(size)) return '0B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let index = 0;
+  let s = size;
+  while (s >= 1024 && index < units.length - 1) {
+    s /= 1024;
+    index++;
+  }
+  return s.toFixed(2) + units[index];
 }
 
+/** 解码文件名 (去除可能的前后引号/转义) */
 export function decodeName(name: string): string {
+  if (!name) return '';
   try {
-    return decodeURIComponent(name.replace(/\+/g, '%20'));
+    // 尝试 decodeURIComponent
+    return decodeURIComponent(name);
   } catch {
     return name;
   }
 }
 
+/** 格式化播放时间 (秒 → mm:ss) */
 export function formatPlayTime(time: number): string {
-  const minutes = Math.floor(time / 60);
-  const seconds = Math.floor(time % 60);
-  return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  if (!time || time <= 0) return '00:00';
+  const m = Math.floor(time / 60);
+  const s = Math.floor(time % 60);
+  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 }
 
-export function formatPlayTimeMs(time: number): string {
-  return formatPlayTime(time / 1000);
-}
-
-export function dateFormat(timestamp: number, format: string = 'YYYY-MM-DD HH:mm:ss'): string {
-  const date = new Date(timestamp * 1000);
-  const year = date.getFullYear();
-  const month = (date.getMonth() + 1).toString().padStart(2, '0');
-  const day = date.getDate().toString().padStart(2, '0');
-  const hours = date.getHours().toString().padStart(2, '0');
-  const minutes = date.getMinutes().toString().padStart(2, '0');
-  const seconds = date.getSeconds().toString().padStart(2, '0');
-  
+/** 日期格式化 */
+export function dateFormat(date: Date | number | string, format = 'YYYY-MM-DD HH:mm:ss'): string {
+  const d = new Date(date);
+  if (isNaN(d.getTime())) return '';
+  const pad = (n: number) => n.toString().padStart(2, '0');
   return format
-    .replace('YYYY', year.toString())
-    .replace('MM', month)
-    .replace('DD', day)
-    .replace('HH', hours)
-    .replace('mm', minutes)
-    .replace('ss', seconds);
+    .replace('YYYY', d.getFullYear().toString())
+    .replace('MM', pad(d.getMonth() + 1))
+    .replace('DD', pad(d.getDate()))
+    .replace('HH', pad(d.getHours()))
+    .replace('mm', pad(d.getMinutes()))
+    .replace('ss', pad(d.getSeconds()));
 }
 
-export function formatPlayCount(count: number): string {
-  if (count < 10000) return count.toString();
-  if (count < 100000000) return (count / 10000).toFixed(1) + '万';
-  return (count / 100000000).toFixed(1) + '亿';
+/** 格式化播放次数 */
+export function formatPlayCount(count: number | string): string {
+  const n = Number(count);
+  if (isNaN(n)) return '0';
+  if (n < 10000) return n.toString();
+  if (n < 100000000) return (n / 10000).toFixed(1) + '万';
+  return (n / 100000000).toFixed(1) + '亿';
 }
 
-export function getQuality(quality: string): string {
-  const map: Record<string, string> = {
-    '128k': '128kbps',
-    '320k': '320kbps',
-    'flac': '无损',
-    'ape': 'APE',
-    'hq': '高品质',
-    'sq': '无损',
-    'exhigh': '极高',
-    'standard': '标准',
-  };
-  return map[quality] || quality;
+// ============ 防御性字段读取 ============
+
+/** 从对象中取值,大小写不敏感 */
+export function getField(obj: Record<string, unknown>, ...keys: string[]): unknown {
+  for (const key of keys) {
+    if (obj[key] !== undefined && obj[key] !== null && obj[key] !== '') {
+      return obj[key];
+    }
+    // 首字母大写
+    const capKey = key.charAt(0).toUpperCase() + key.slice(1);
+    if (obj[capKey] !== undefined && obj[capKey] !== null && obj[capKey] !== '') {
+      return obj[capKey];
+    }
+  }
+  return undefined;
 }
 
-export function generateRandomId(): string {
-  return Math.random().toString(36).substring(2, 15);
+/** 归一化 songInfo: musicId/songmid 互为 fallback */
+export function normalizeSongInfo(song: Record<string, unknown>): Record<string, unknown> {
+  const result = { ...song };
+  const musicId = getField(result, 'musicId', 'songmid', 'hash', 'copyrightId');
+  if (musicId) {
+    if (!result.musicId) result.musicId = String(musicId);
+    if (!result.songmid) result.songmid = String(musicId);
+  }
+  return result;
 }
 
-export { httpFetch } from './request';
+// ============ 通用 defer ============
+export function defer<T>(): { promise: Promise<T>; resolve: (v: T) => void; reject: (e: Error) => void } {
+  let resolve!: (v: T) => void;
+  let reject!: (e: Error) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+// 重新导出 crypto-shim 方便平台代码引用
 export * from './crypto-shim';

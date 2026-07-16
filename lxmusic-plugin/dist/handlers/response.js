@@ -1,53 +1,20 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.jsonResponse = jsonResponse;
-exports.successResponse = successResponse;
-exports.errorResponse = errorResponse;
-exports.warningResponse = warningResponse;
-exports.textResponse = textResponse;
-exports.htmlResponse = htmlResponse;
-exports.notFoundResponse = notFoundResponse;
-exports.badRequestResponse = badRequestResponse;
-function jsonResponse(body, status = 200) {
-    const json = JSON.stringify(body);
-    return {
-        statusCode: status,
-        headers: {
-            'Content-Type': 'application/json; charset=utf-8',
-        },
-        body: new Uint8Array(json.split('').map(c => c.charCodeAt(0))),
-    };
-}
-function successResponse(data, msg = 'success') {
+// handlers/response.ts - 统一响应封装 (内部 UI 用)
+// 注意: 主程序契约端点 (/api/search, /api/music/url) 走 SDK 工厂返回裸 {results}/{url}
+// 其他内部端点用统一封装 {code:0, msg:'success', data} / 错误 {code:statusCode, msg, data:null}
+import { jsonResponse } from '../@songloft/plugin-sdk';
+export function success(data, msg = 'success') {
     return jsonResponse({ code: 0, msg, data });
 }
-function errorResponse(msg, code = 500) {
-    return jsonResponse({ code, msg, data: null }, code);
-}
-function warningResponse(data, warning) {
+export function successWithWarning(data, warning) {
     return jsonResponse({ code: 0, msg: 'success', data, warning });
 }
-function textResponse(text, status = 200) {
-    return {
-        statusCode: status,
-        headers: {
-            'Content-Type': 'text/plain; charset=utf-8',
-        },
-        body: new Uint8Array(text.split('').map(c => c.charCodeAt(0))),
-    };
+export function error(msg, status = 500) {
+    return jsonResponse({ code: status, msg, data: null }, status);
 }
-function htmlResponse(html, status = 200) {
-    return {
-        statusCode: status,
-        headers: {
-            'Content-Type': 'text/html; charset=utf-8',
-        },
-        body: new Uint8Array(html.split('').map(c => c.charCodeAt(0))),
-    };
+export function badRequest(msg) {
+    return error(msg, 400);
 }
-function notFoundResponse() {
-    return jsonResponse({ code: 404, msg: 'Not Found', data: null }, 404);
+export function notFound(msg = 'Not Found') {
+    return error(msg, 404);
 }
-function badRequestResponse(msg) {
-    return jsonResponse({ code: 400, msg, data: null }, 400);
-}
+export { jsonResponse } from '../@songloft/plugin-sdk';

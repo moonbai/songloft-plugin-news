@@ -1,2 +1,2 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
+// engine/types.ts - 引擎类型定义
+export {};

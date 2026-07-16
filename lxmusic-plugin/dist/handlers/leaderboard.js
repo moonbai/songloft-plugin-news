@@ -1,43 +1,38 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.createLeaderboardHandlers = createLeaderboardHandlers;
-const facade_1 = require("../musicSdk/facade");
-const response_1 = require("./response");
-const platformModules = { kw: facade_1.kw, kg: facade_1.kg, tx: facade_1.tx, wy: facade_1.wy, mg: facade_1.mg };
-function createLeaderboardHandlers() {
-    return {
-        async getBoards(req) {
-            try {
-                const query = req.query;
-                const source_id = query.source_id || 'kw';
-                const module = platformModules[source_id];
-                if (!module)
-                    return (0, response_1.badRequestResponse)('Unknown source');
-                const result = await module.leaderboard.boards();
-                return (0, response_1.successResponse)(result);
-            }
-            catch (e) {
-                return (0, response_1.errorResponse)('Failed to get leaderboards');
-            }
-        },
-        async getList(req) {
-            try {
-                const query = req.query;
-                const source_id = query.source_id || 'kw';
-                const id = query.id;
-                const page = Number(query.page) || 1;
-                const limit = Number(query.limit) || 20;
-                if (!id)
-                    return (0, response_1.badRequestResponse)('ID is required');
-                const module = platformModules[source_id];
-                if (!module)
-                    return (0, response_1.badRequestResponse)('Unknown source');
-                const result = await module.leaderboard.list(id, page, limit);
-                return (0, response_1.successResponse)(result);
-            }
-            catch (e) {
-                return (0, response_1.errorResponse)('Failed to get leaderboard list');
-            }
-        },
-    };
-}
+// handlers/leaderboard.ts - 排行榜
+import { platformModules } from '../musicSdk/facade';
+import { success, error, badRequest } from './response';
+/** 排行榜列表 */
+export const leaderboardBoards = async (req) => {
+    try {
+        const q = req.query || {};
+        const sourceId = q.source_id || 'kw';
+        const mod = platformModules[sourceId];
+        if (!mod?.leaderboard?.boards)
+            return badRequest('Unknown source or boards not supported');
+        const boards = await mod.leaderboard.boards();
+        return success(boards);
+    }
+    catch (e) {
+        return error('Failed to get boards: ' + e.message);
+    }
+};
+/** 排行榜歌曲列表 */
+export const leaderboardList = async (req) => {
+    try {
+        const q = req.query || {};
+        const sourceId = q.source_id || 'kw';
+        const id = q.id;
+        const page = Number(q.page) || 1;
+        const limit = Number(q.limit) || 20;
+        if (!id)
+            return badRequest('id is required');
+        const mod = platformModules[sourceId];
+        if (!mod?.leaderboard?.list)
+            return badRequest('Unknown source or list not supported');
+        const result = await mod.leaderboard.list(id, page, limit);
+        return success(result);
+    }
+    catch (e) {
+        return error('Failed to get leaderboard list: ' + e.message);
+    }
+};

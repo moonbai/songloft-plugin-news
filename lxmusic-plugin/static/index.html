@@ -3,83 +3,213 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LX Music Plugin</title>
+  <title>LX Music 音源</title>
+  <meta name="color-scheme" content="light dark">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <div class="container">
-    <header class="header">
-      <h1>LX Music Source Plugin</h1>
-      <p>Search and import music from multiple platforms</p>
+  <div class="app">
+    <!-- 顶部应用栏 -->
+    <header class="app-bar">
+      <div class="app-bar-row">
+        <div class="brand">
+          <span class="brand-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z"/></svg>
+          </span>
+          <div class="brand-text">
+            <h1 class="brand-title">LX Music 音源</h1>
+            <p class="brand-sub">多平台音乐搜索 · 导入 · 歌单浏览</p>
+          </div>
+        </div>
+        <span class="health-pill" id="healthPill" title="音源加载状态">
+          <span class="health-dot"></span><span id="healthText">连接中</span>
+        </span>
+      </div>
+
+      <nav class="tabs" role="tablist" aria-label="主导航">
+        <button class="tab active" role="tab" data-tab="search" aria-selected="true">搜索</button>
+        <button class="tab" role="tab" data-tab="sources" aria-selected="false">音源管理</button>
+        <button class="tab" role="tab" data-tab="songlist" aria-selected="false">歌单</button>
+        <span class="tab-indicator" aria-hidden="true"></span>
+      </nav>
     </header>
 
-    <div class="tabs">
-      <button class="tab-btn active" data-tab="search">Search</button>
-      <button class="tab-btn" data-tab="sources">Sources</button>
-      <button class="tab-btn" data-tab="playlists">Playlists</button>
-    </div>
-
-    <div class="tab-content">
-      <div id="search" class="tab-pane active">
-        <div class="search-bar">
-          <select id="source-select">
-            <option value="kw">KuWo</option>
-            <option value="kg">KuGou</option>
-            <option value="tx">QQ Music</option>
-            <option value="wy">NetEase</option>
-            <option value="mg">Migu</option>
-          </select>
-          <input type="text" id="search-input" placeholder="Search for music...">
-          <button id="search-btn">Search</button>
-        </div>
-        
-        <div class="search-options">
-          <label>
-            <span>Quality:</span>
-            <select id="quality-select">
-              <option value="standard">Standard</option>
-              <option value="128k">128kbps</option>
-              <option value="320k">320kbps</option>
-              <option value="flac">FLAC</option>
-            </select>
-          </label>
+    <main class="main">
+      <!-- ============ 搜索 ============ -->
+      <section class="panel active" id="panel-search" role="tabpanel">
+        <div class="card">
+          <div class="toolbar">
+            <div class="field field-select">
+              <select id="searchSource" aria-label="搜索平台"></select>
+            </div>
+            <div class="field field-grow">
+              <input type="text" id="searchInput" placeholder="输入歌曲 / 歌手 / 专辑" autocomplete="off">
+            </div>
+            <button class="btn btn-primary" id="searchBtn">
+              <span class="spinner spinner-sm" hidden></span><span>搜索</span>
+            </button>
+          </div>
         </div>
 
-        <div id="search-results" class="results"></div>
-
-        <div class="import-bar">
-          <button id="import-all-btn" disabled>Import All</button>
-          <button id="import-selected-btn" disabled>Import Selected</button>
+        <div class="card">
+          <div class="card-head">
+            <h2 class="section-title">搜索结果</h2>
+            <div class="card-actions">
+              <label class="checkbox-inline">
+                <input type="checkbox" id="selectAll"> <span>全选</span>
+              </label>
+              <span class="muted" id="resultCount">0 条</span>
+              <button class="btn btn-primary" id="importBtn" disabled>导入选中</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table" id="searchTable">
+              <thead>
+                <tr>
+                  <th class="col-check"></th>
+                  <th class="col-title">歌曲</th>
+                  <th class="col-artist">歌手</th>
+                  <th class="col-album">专辑</th>
+                  <th class="col-dur">时长</th>
+                </tr>
+              </thead>
+              <tbody id="searchResults">
+                <tr><td colspan="5" class="empty">输入关键词开始搜索</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="pagination" id="searchPagination" hidden>
+            <button class="btn btn-tonal" id="searchPrev">上一页</button>
+            <span class="page-info" id="searchPageInfo">1 / 1</span>
+            <button class="btn btn-tonal" id="searchNext">下一页</button>
+          </div>
         </div>
-      </div>
+      </section>
 
-      <div id="sources" class="tab-pane">
-        <div class="source-actions">
-          <input type="file" id="source-file" accept=".js,.zip" multiple>
-          <button id="import-file-btn">Import File</button>
-          <input type="text" id="source-url" placeholder="Source URL...">
-          <button id="import-url-btn">Import URL</button>
-          <button id="reload-sources-btn">Reload All</button>
+      <!-- ============ 音源管理 ============ -->
+      <section class="panel" id="panel-sources" role="tabpanel">
+        <div class="card">
+          <h2 class="section-title">导入音源脚本</h2>
+          <div class="import-grid">
+            <div class="import-block">
+              <h3 class="block-title">文件上传</h3>
+              <div class="dropzone" id="dropzone" tabindex="0">
+                <input type="file" id="fileInput" accept=".js,.zip" multiple hidden>
+                <span class="dropzone-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M19 13v6H5v-6H3v6a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-6h-2zM11 3.83l-3.59 3.59L9 9l4-4 4 4 1.59-1.59L14 3.83V15h-2V3.83z" transform="rotate(180 12 9)"/></svg>
+                </span>
+                <p class="dropzone-text">点击选择或拖拽文件到此处</p>
+                <p class="dropzone-hint muted">支持 .js 与 .zip（ZIP 内可批量导入）</p>
+                <div class="file-list" id="fileList"></div>
+              </div>
+              <button class="btn btn-primary" id="uploadBtn" disabled>上传导入</button>
+            </div>
+
+            <div class="import-block">
+              <h3 class="block-title">URL 导入</h3>
+              <div class="field">
+                <input type="text" id="sourceUrl" placeholder="https://example.com/source.js" autocomplete="off">
+              </div>
+              <button class="btn btn-primary" id="importUrlBtn">从 URL 导入</button>
+              <div class="block-divider"><span>或</span></div>
+              <button class="btn btn-tonal" id="reloadBtn">重新加载全部音源</button>
+            </div>
+          </div>
         </div>
 
-        <div id="source-list" class="source-list"></div>
-      </div>
-
-      <div id="playlists" class="tab-pane">
-        <div class="playlist-actions">
-          <input type="text" id="playlist-name" placeholder="Playlist name...">
-          <input type="text" id="playlist-desc" placeholder="Description...">
-          <button id="create-playlist-btn">Create Playlist</button>
+        <div class="card loading-card" id="loadingCard" hidden>
+          <div class="loading-status">
+            <span class="spinner" aria-hidden="true"></span>
+            <div class="loading-body">
+              <div class="loading-title">正在批量加载音源…</div>
+              <div class="loading-detail muted" id="loadingDetail"></div>
+              <div class="progress-track"><div class="progress-fill" id="loadingProgress"></div></div>
+            </div>
+          </div>
         </div>
 
-        <div id="playlist-list" class="playlist-list"></div>
-      </div>
-    </div>
+        <div class="card">
+          <div class="card-head">
+            <h2 class="section-title">已导入音源</h2>
+            <span class="muted" id="sourceCount">0 个</span>
+          </div>
+          <div class="source-list" id="sourceList">
+            <div class="empty">尚未导入任何音源脚本</div>
+          </div>
+        </div>
+      </section>
 
-    <footer class="footer">
-      <p>⚠️ Disclaimer: For personal study only. Do not use for commercial purposes.</p>
-    </footer>
+      <!-- ============ 歌单 ============ -->
+      <section class="panel" id="panel-songlist" role="tabpanel">
+        <div class="card">
+          <div class="toolbar">
+            <div class="field field-select">
+              <select id="songlistSource" aria-label="歌单平台"></select>
+            </div>
+            <div class="field field-grow">
+              <input type="text" id="songlistKeyword" placeholder="搜索歌单名称（可选）" autocomplete="off">
+            </div>
+            <button class="btn btn-primary" id="songlistSearchBtn">搜索歌单</button>
+            <button class="btn btn-tonal" id="songlistBrowseBtn">浏览分类</button>
+          </div>
+        </div>
+
+        <div class="card" id="tagsCard">
+          <h2 class="section-title">歌单分类</h2>
+          <div class="tag-chips" id="tagChips">
+            <div class="empty">选择平台后点击「浏览分类」</div>
+          </div>
+        </div>
+
+        <div class="card" id="songlistListCard">
+          <div class="card-head">
+            <h2 class="section-title">歌单列表</h2>
+            <button class="btn btn-tonal" id="backToTagsBtn" hidden>← 返回分类</button>
+          </div>
+          <div class="songlist-grid" id="songlistList">
+            <div class="empty">暂无数据</div>
+          </div>
+          <div class="pagination" id="songlistPagination" hidden>
+            <button class="btn btn-tonal" id="songlistPrev">上一页</button>
+            <span class="page-info" id="songlistPageInfo">1 / 1</span>
+            <button class="btn btn-tonal" id="songlistNext">下一页</button>
+          </div>
+        </div>
+
+        <div class="card" id="songlistDetailCard" hidden>
+          <div class="card-head">
+            <button class="btn btn-tonal" id="backToListBtn">← 返回列表</button>
+            <h2 class="section-title" id="detailTitle">歌单详情</h2>
+          </div>
+          <div class="detail-info" id="detailInfo"></div>
+          <div class="card-actions detail-actions">
+            <span class="muted" id="detailSongCount">0 首</span>
+            <button class="btn btn-primary" id="importSonglistBtn">导入全部歌曲</button>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th class="col-title">歌曲</th>
+                  <th class="col-artist">歌手</th>
+                  <th class="col-album">专辑</th>
+                  <th class="col-dur">时长</th>
+                </tr>
+              </thead>
+              <tbody id="detailSongs">
+                <tr><td colspan="4" class="empty">加载中…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
   </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script src="js/app.js"></script>
 </body>

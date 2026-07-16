@@ -1,19 +1,19 @@
 {
   "name": "songloft-plugin-lxmusic",
   "version": "1.0.0",
-  "description": "Songloft plugin for lx-music ecosystem",
-  "main": "main.js",
+  "description": "LX Music Source Plugin for Songloft - 多平台音乐搜索与播放",
   "scripts": {
-    "build": "tsc --outDir dist && mkdir -p dist/static && cp -r static/* dist/static/ && cd dist && zip -r lxmusic.jsplugin.zip .",
-    "dev": "tsc --watch --outDir dist",
-    "typecheck": "tsc --noEmit",
-    "clean": "rm -rf dist"
+    "build": "tsc --outDir dist && mkdir -p dist/static && cp -r static/* dist/static/ && cp plugin.json dist/ && cd dist && zip -r lxmusic.jsplugin.zip . -x '*.jsplugin.zip'",
+    "dev": "tsc --watch",
+    "validate": "songloft-plugin validate dist/lxmusic.jsplugin.zip",
+    "publish": "songloft-plugin publish dist/lxmusic.jsplugin.zip"
   },
   "devDependencies": {
-    "@types/crypto-js": "^4.2.2",
-    "typescript": "^5.4.0"
+    "@songloft/plugin-builder": "latest",
+    "@songloft/plugin-sdk": "latest",
+    "typescript": "^5.4.0",
+    "crypto-js": "^4.2.0",
+    "@types/crypto-js": "^4.2.0"
   },
-  "dependencies": {
-    "crypto-js": "^4.2.0"
-  }
+  "dependencies": {}
 }

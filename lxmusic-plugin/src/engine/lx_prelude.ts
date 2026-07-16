@@ -1,238 +1,218 @@
-// LX Music Prelude - 注入子 VM 的全局 lx 对象
-// 遵循 lx-music-desktop 自定义源 API
+// engine/lx_prelude.ts - LX prelude 代码
+// 注入子 VM,构造洛雪音源脚本期望的全局 lx 对象
 
 export const LX_PRELUDE_JS = `
-// 全局环境补丁
+// ============ LX Prelude ============
+// 构造 lx-music-desktop 自定义源 API 的全局环境
+
 globalThis.window = globalThis;
 globalThis.global = globalThis;
 
-// 事件通道 - 与父 VM 通信
-var __lx_channels = {
-  pending: {},
-  handlers: {}
-};
+// --- 事件系统 ---
+var __lx_handlers = {};
+var __lx_sources = {};
+var __lx_pendingDispatch = {};
 
-// 内部发送事件到父侧
-function __lx_send(eventName, data) {
-  if (typeof __go_send === 'function') {
-    __go_send(eventName, JSON.stringify(data));
-  }
-}
-
-// lx 全局对象
-var lx = {
+globalThis.lx = {
   version: '2.0.0',
-  
-  // 当前脚本信息 (由父侧注入)
+  sources: {},
   currentScriptInfo: null,
-  _sourceId: '',
-  
-  // 注册的源信息
-  sources: [],
-  
-  // HTTP 请求 - 回调风格
+  ENV: 'plugin',
+
+  // --- 回调风格 HTTP ---
   request: function(url, options, callback) {
     options = options || {};
-    var method = options.method || 'GET';
-    var headers = options.headers || {};
-    var timeout = options.timeout || 10000;
-    
-    // 处理 body
-    var body = null;
-    if (options.body) {
-      if (typeof options.body === 'string') {
-        body = options.body;
-      } else {
-        body = JSON.stringify(options.body);
-        if (!headers['Content-Type']) {
-          headers['Content-Type'] = 'application/json';
+    var method = (options.method || 'GET').toUpperCase();
+    var headers = Object.assign({
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    }, options.headers || {});
+
+    var fetchOptions = { method: method, headers: headers };
+
+    try {
+      if (options.form) {
+        var formParts = [];
+        for (var k in options.form) {
+          formParts.push(encodeURIComponent(k) + '=' + encodeURIComponent(String(options.form[k])));
+        }
+        fetchOptions.body = formParts.join('&');
+        headers['Content-Type'] = 'application/x-www-form-urlencoded';
+      } else if (options.formData) {
+        var fdParts = [];
+        for (var k2 in options.formData) {
+          fdParts.push(encodeURIComponent(k2) + '=' + encodeURIComponent(String(options.formData[k2])));
+        }
+        fetchOptions.body = fdParts.join('&');
+        headers['Content-Type'] = 'application/x-www-form-urlencoded';
+      } else if (options.body !== undefined && options.body !== null) {
+        if (typeof options.body === 'string') {
+          fetchOptions.body = options.body;
+        } else {
+          fetchOptions.body = JSON.stringify(options.body);
+          if (!headers['Content-Type']) headers['Content-Type'] = 'application/json';
         }
       }
+    } catch(e) {
+      callback(e, null, null);
+      return;
     }
-    
-    // 处理 form
-    if (options.form) {
-      var parts = [];
-      for (var key in options.form) {
-        parts.push(encodeURIComponent(key) + '=' + encodeURIComponent(options.form[key]));
-      }
-      body = parts.join('&');
-      if (!headers['Content-Type']) {
-        headers['Content-Type'] = 'application/x-www-form-urlencoded';
-      }
-    }
-    
-    // 默认 UA
-    if (!headers['User-Agent']) {
-      headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-    }
-    
-    // 发起 fetch
-    fetch(url, {
-      method: method,
-      headers: headers,
-      body: body,
-      timeout: timeout
-    }).then(function(response) {
+
+    fetch(url, fetchOptions).then(function(resp) {
       var respHeaders = {};
-      if (response.headers && response.headers.forEach) {
-        response.headers.forEach(function(v, k) { respHeaders[k] = v; });
-      }
-      
-      var contentType = respHeaders['content-type'] || '';
-      
-      // 读取 body
-      if (contentType.includes('application/json')) {
-        return response.json().then(function(json) {
-          return { body: json, isJson: true, response: response, headers: respHeaders };
-        }).catch(function() {
-          return response.text().then(function(text) {
-            return { body: text, isJson: false, response: response, headers: respHeaders };
-          });
-        });
-      } else {
-        return response.text().then(function(text) {
-          return { body: text, isJson: false, response: response, headers: respHeaders };
-        });
-      }
-    }).then(function(result) {
-      callback(null, {
-        statusCode: result.response.status,
-        statusMessage: result.response.statusText || '',
-        headers: result.headers
-      }, result.body);
+      resp.headers.forEach(function(val, key) {
+        respHeaders[key.toLowerCase()] = val;
+      });
+      return resp.text().then(function(text) {
+        var parsedBody = text;
+        var ct = respHeaders['content-type'] || '';
+        if (ct.indexOf('application/json') >= 0 || (text && text.trim() && (text.trim().charAt(0) === '{' || text.trim().charAt(0) === '['))) {
+          try { parsedBody = JSON.parse(text); } catch(e) { parsedBody = text; }
+        }
+        var respInfo = {
+          statusCode: resp.status,
+          statusMessage: resp.statusText,
+          headers: respHeaders,
+          body: parsedBody
+        };
+        callback(null, respInfo, parsedBody);
+      });
     }).catch(function(err) {
       callback(err, null, null);
     });
   },
-  
-  // Promise 版本的 request
+
+  // --- Promise 风格 HTTP ---
   promiseRequest: function(url, options) {
     return new Promise(function(resolve, reject) {
-      lx.request(url, options, function(err, resp, body) {
-        if (err) {
-          reject(err);
-        } else {
-          resolve({ statusCode: resp.statusCode, headers: resp.headers, body: body });
-        }
+      globalThis.lx.request(url, options, function(err, resp) {
+        if (err) reject(err);
+        else resolve(resp);
       });
     });
   },
-  
-  // 发送事件 (inited 等)
+
+  // --- 事件发送 (子→父) ---
   send: function(eventName, data) {
+    // 特殊处理 inited
     if (eventName === 'inited') {
-      lx.sources = data.sources || [];
+      __lx_sources = data.sources || {};
+      globalThis.lx.sources = __lx_sources;
     }
-    __lx_send('lx_event', { eventName: eventName, data: data });
+    try {
+      __go_send(eventName, JSON.stringify(data));
+    } catch(e) {
+      // __go_send 可能在某些上下文中不可用
+    }
   },
-  
-  // 注册事件处理器
+
+  // --- 事件注册 (脚本注册 handler) ---
   on: function(eventName, handler) {
-    __lx_channels.handlers[eventName] = handler;
+    if (!__lx_handlers[eventName]) {
+      __lx_handlers[eventName] = [];
+    }
+    __lx_handlers[eventName].push(handler);
   },
-  
-  // 内部: 分发请求 (由父侧调用)
+
+  // --- 父侧触发脚本处理请求 ---
   _dispatch: function(reqId, eventName, data) {
-    var handler = __lx_channels.handlers[eventName];
-    if (!handler) {
-      __lx_send('lx_dispatch_result', { id: reqId, error: 'No handler for ' + eventName });
+    var handlers = __lx_handlers[eventName];
+    if (!handlers || handlers.length === 0) {
+      __go_send('dispatchError', JSON.stringify({ id: reqId, error: 'No handler for event: ' + eventName }));
       return;
     }
-    
+
+    var settled = false;
+    var watchdog = setTimeout(function() {
+      if (!settled) {
+        settled = true;
+        __go_send('dispatchError', JSON.stringify({ id: reqId, error: 'Dispatch timeout (18s)' }));
+      }
+    }, 18000);
+
     try {
-      var result = handler(data);
-      
-      // 支持 Promise
+      var result = handlers[0](data);
       if (result && typeof result.then === 'function') {
-        result.then(function(r) {
-          __lx_send('lx_dispatch_result', { id: reqId, result: r });
-        }).catch(function(e) {
-          __lx_send('lx_dispatch_result', { id: reqId, error: String(e) });
+        result.then(function(res) {
+          if (!settled) {
+            settled = true;
+            clearTimeout(watchdog);
+            __go_send('dispatchResult', JSON.stringify({ id: reqId, result: res }));
+          }
+        }).catch(function(err) {
+          if (!settled) {
+            settled = true;
+            clearTimeout(watchdog);
+            __go_send('dispatchError', JSON.stringify({ id: reqId, error: String(err && err.message || err) }));
+          }
         });
       } else {
-        __lx_send('lx_dispatch_result', { id: reqId, result: result });
+        if (!settled) {
+          settled = true;
+          clearTimeout(watchdog);
+          __go_send('dispatchResult', JSON.stringify({ id: reqId, result: result }));
+        }
       }
-    } catch (e) {
-      __lx_send('lx_dispatch_result', { id: reqId, error: String(e) });
+    } catch(e) {
+      if (!settled) {
+        settled = true;
+        clearTimeout(watchdog);
+        __go_send('dispatchError', JSON.stringify({ id: reqId, error: String(e && e.message || e) }));
+      }
     }
   },
-  
-  // 注册源
-  registerSource: function(sourceInfo) {
-    lx.sources.push(sourceInfo);
-  },
-  
-  // 工具函数
+
+  // --- 工具集 ---
   utils: {
-    // Buffer 编解码
     buffer: {
       from: function(data, encoding) {
-        if (typeof Buffer !== 'undefined') {
-          return Buffer.from(data, encoding);
-        }
-        if (typeof data === 'string') {
-          return new TextEncoder().encode(data);
-        }
-        return data;
+        return Buffer.from(data, encoding);
       },
-      toString: function(buf, encoding) {
-        if (typeof Buffer !== 'undefined' && Buffer.isBuffer(buf)) {
-          return buf.toString(encoding);
-        }
-        return new TextDecoder().decode(buf);
+      bufToString: function(buf, encoding) {
+        return buf.toString(encoding);
+      },
+      alloc: function(size, fill) {
+        return Buffer.alloc(size, fill);
       }
     },
-    
-    // 加密工具
     crypto: {
       md5: function(data) {
-        if (typeof crypto !== 'undefined' && crypto.md5) {
-          return crypto.md5(data);
-        }
-        return '';
+        try { return crypto.md5(data); } catch(e) { return ''; }
       },
-      aesEncrypt: function(data, key, iv) {
-        if (typeof crypto !== 'undefined' && crypto.aesEncrypt) {
-          return crypto.aesEncrypt(data, key, iv);
-        }
-        return '';
+      aesEncrypt: function(data, key, iv, mode) {
+        try { return crypto.aesEncrypt(data, key, iv, mode); } catch(e) { return ''; }
+      },
+      aesDecrypt: function(data, key, iv, mode) {
+        try { return crypto.aesDecrypt(data, key, iv, mode); } catch(e) { return ''; }
+      },
+      rsaEncrypt: function(data, key) {
+        try { return crypto.rsaEncrypt(data, key); } catch(e) { return ''; }
       },
       randomBytes: function(n) {
-        if (typeof crypto !== 'undefined' && crypto.randomBytes) {
-          return crypto.randomBytes(n);
-        }
-        var arr = new Uint8Array(n);
-        for (var i = 0; i < n; i++) arr[i] = Math.floor(Math.random() * 256);
-        return arr;
+        try { return crypto.randomBytes(n); } catch(e) { return ''; }
       }
     },
-    
-    // 压缩解压
     zlib: {
       inflate: function(data) {
-        if (typeof zlib !== 'undefined' && zlib.inflate) {
-          return zlib.inflate(data);
-        }
-        return null;
+        try { return zlib.inflate(data); } catch(e) { return null; }
       },
       deflate: function(data) {
-        if (typeof zlib !== 'undefined' && zlib.deflate) {
-          return zlib.deflate(data);
-        }
-        return null;
+        try { return zlib.deflate(data); } catch(e) { return null; }
       }
     }
   },
-  
-  // 初始化完成通知
+
+  // --- 通知初始化完成 ---
   notifyInited: function() {
-    lx.send('inited', { sources: lx.sources });
+    globalThis.lx.send('inited', { sources: globalThis.lx.sources });
+  },
+
+  // --- 兼容性: 派发请求的简化接口 ---
+  request_dispatch: function(reqId, source, action, info) {
+    globalThis.lx._dispatch(reqId, 'request', { source: source, action: action, info: info });
   }
 };
 
-// 暴露到全局
-globalThis.lx = lx;
+// ============ 防止脚本意外覆盖关键函数 ============
+var __originalSend = globalThis.lx.send;
+var __originalDispatch = globalThis.lx._dispatch;
 `;
-
-export default LX_PRELUDE_JS;

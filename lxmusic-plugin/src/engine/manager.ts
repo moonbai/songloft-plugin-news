@@ -1,245 +1,154 @@
-import { SourceRuntime } from './runtime';
-import type { SongInfo } from '../types';
+// engine/manager.ts - RuntimeManager
+// 管理多个 SourceRuntime,维护 平台→runtime[] 反向索引
+// 取 URL 时多源并行竞速
 
-export interface GetUrlResult {
-  url: string;
-  headers?: Record<string, string>;
-  source?: SourceRuntime;
-}
+import { SourceRuntime } from './runtime';
+import type { LoadedSourceInfo } from './types';
+import type { SongInfo, MusicUrlResult } from '../types';
 
 export class RuntimeManager {
   private runtimes: Map<string, SourceRuntime> = new Map();
-  private platformIndex: Map<string, Set<string>> = new Map();
+  private platformIndex: Map<string, string[]> = new Map(); // platform → runtimeIds[]
 
-  /**
-   * 加载一个音源脚本
-   */
-  async loadSource(id: string, name: string, script: string): Promise<boolean> {
-    if (this.runtimes.has(id)) {
-      const old = this.runtimes.get(id);
-      if (old) {
-        old.destroy();
-        this.runtimes.delete(id);
-      }
+  /** 加载音源 */
+  async loadSource(id: string, name: string, script: string, scriptInfo?: unknown): Promise<boolean> {
+    // 如果已存在,先销毁
+    const existing = this.runtimes.get(id);
+    if (existing) {
+      await existing.destroy();
+      this.runtimes.delete(id);
     }
 
-    const runtime = new SourceRuntime({ id, name });
-    const success = await runtime.init(script);
-    
-    if (success) {
+    const runtime = new SourceRuntime(id, name, script, scriptInfo as any);
+    const result = await runtime.init();
+
+    if (result.success && result.sources) {
       this.runtimes.set(id, runtime);
-      this.updatePlatformIndex(runtime);
-      songloft.log.info(`Source ${name} loaded successfully`);
+      this.rebuildIndex();
+      return true;
     }
-    
-    return success;
+
+    songloft.log.error(`Failed to load source ${name}: ${result.error}`);
+    return false;
   }
 
-  private updatePlatformIndex(runtime: SourceRuntime): void {
-    // 先清理旧的索引
-    for (const [platform, ids] of this.platformIndex) {
-      ids.delete(runtime.getId());
-      if (ids.size === 0) {
-        this.platformIndex.delete(platform);
-      }
-    }
-    
-    // 添加新索引
-    for (const platform of runtime.getPlatforms()) {
-      if (!this.platformIndex.has(platform)) {
-        this.platformIndex.set(platform, new Set());
-      }
-      this.platformIndex.get(platform)!.add(runtime.getId());
+  /** 卸载音源 */
+  unloadSource(id: string): void {
+    const runtime = this.runtimes.get(id);
+    if (runtime) {
+      runtime.destroy().catch(() => {});
+      this.runtimes.delete(id);
+      this.rebuildIndex();
     }
   }
 
-  /**
-   * 获取支持指定平台的所有 runtime
-   */
-  getRuntimesForPlatform(platform: string): SourceRuntime[] {
-    const ids = this.platformIndex.get(platform);
-    if (!ids) return [];
-    
+  /** 重建平台反向索引 */
+  private rebuildIndex(): void {
+    this.platformIndex.clear();
+    for (const [id, runtime] of this.runtimes) {
+      for (const platform of runtime.getPlatforms()) {
+        if (!this.platformIndex.has(platform)) {
+          this.platformIndex.set(platform, []);
+        }
+        this.platformIndex.get(platform)!.push(id);
+      }
+    }
+  }
+
+  /** 获取播放 URL — 多源并行竞速 */
+  async getMusicUrl(songInfo: SongInfo, quality: string): Promise<MusicUrlResult | null> {
+    const platform = songInfo.platform;
+    const runtimeIds = this.platformIndex.get(platform);
+
+    if (!runtimeIds || runtimeIds.length === 0) {
+      return null;
+    }
+
+    // 收集所有支持该平台的 runtime
     const runtimes: SourceRuntime[] = [];
-    for (const id of ids) {
+    for (const id of runtimeIds) {
       const rt = this.runtimes.get(id);
-      if (rt && rt.isInited()) {
+      if (rt && rt.getStatus() === 'ready') {
         runtimes.push(rt);
       }
     }
-    
-    // 按成功率排序
-    runtimes.sort((a, b) => {
-      const sa = a.getStats();
-      const sb = b.getStats();
-      const rateA = sa.totalCalls > 0 ? sa.successCalls / sa.totalCalls : 0;
-      const rateB = sb.totalCalls > 0 ? sb.successCalls / sb.totalCalls : 0;
-      return rateB - rateA;
-    });
-    
-    return runtimes;
-  }
 
-  /**
-   * 获取音乐 URL - 并行竞速
-   */
-  async getMusicUrl(songInfo: SongInfo, quality: string): Promise<GetUrlResult | null> {
-    const platform = songInfo.platform;
-    const runtimes = this.getRuntimesForPlatform(platform);
-    
-    if (runtimes.length === 0) {
-      songloft.log.warn(`No source available for platform: ${platform}`);
-      return null;
-    }
+    if (runtimes.length === 0) return null;
 
-    const musicInfo = this.songInfoToMusicInfo(songInfo);
-
-    // 单源直接调用
+    // 单源直接请求
     if (runtimes.length === 1) {
-      const url = await runtimes[0].getMusicUrl(platform, musicInfo, quality);
-      if (url) {
-        return { url, source: runtimes[0] };
-      }
+      const result = await runtimes[0].getMusicUrl(songInfo, quality);
+      if (result) return result;
       return null;
     }
 
-    // 多源并行竞速
-    const calls = runtimes.map(rt => ({
-      envName: rt.getEnvName(),
-      code: this.buildDispatchCode(rt, platform, musicInfo, quality),
-      timeout: 18000,
-      waitChannels: ['lx_dispatch_result']
-    }));
+    // 多源并行竞速 (用 executeParallel 的思路,但这里用 Promise.race)
+    // 构造并行请求
+    const promises = runtimes.map(rt =>
+      rt.getMusicUrl(songInfo, quality).then(result => ({ runtime: rt, result })),
+    );
 
     try {
-      const results = await songloft.jsenv.executeParallel(calls, 3);
-      
-      for (let i = 0; i < results.length; i++) {
-        const result = results[i];
-        const rt = runtimes[i];
-        
-        const url = this.extractUrlFromResult(result);
-        if (url) {
-          return { url, source: rt };
-        }
-      }
-    } catch (error) {
-      songloft.log.error('executeParallel error:', error);
-    }
-
-    return null;
-  }
-
-  private songInfoToMusicInfo(songInfo: SongInfo): Record<string, unknown> {
-    return {
-      name: songInfo.name,
-      singer: songInfo.singer,
-      album: songInfo.album,
-      musicId: songInfo.musicId || songInfo.songmid,
-      songmid: songInfo.songmid || songInfo.musicId,
-      hash: songInfo.hash,
-      copyrightId: songInfo.copyrightId,
-      albumId: songInfo.albumId,
-      albumMid: songInfo.albumMid,
-      strMediaMid: songInfo.strMediaMid,
-      platform: songInfo.platform,
-    };
-  }
-
-  private buildDispatchCode(runtime: SourceRuntime, platform: string, musicInfo: Record<string, unknown>, quality: string): string {
-    const reqId = 'req_' + runtime.getId() + '_' + Date.now();
-    const dispatchData = {
-      source: platform,
-      action: 'musicUrl',
-      info: { musicInfo, type: quality }
-    };
-    return `lx._dispatch('${reqId}', 'request', ${JSON.stringify(dispatchData)});`;
-  }
-
-  private extractUrlFromResult(result: unknown): string | null {
-    if (!result) return null;
-    
-    try {
-      let obj: Record<string, unknown>;
-      if (typeof result === 'string') {
-        obj = JSON.parse(result);
-      } else if (typeof result === 'object') {
-        obj = result as Record<string, unknown>;
-      } else {
-        return null;
-      }
-      
-      if (obj.error) return null;
-      
-      if (typeof obj.result === 'string' && obj.result) {
-        return obj.result;
-      }
-      
-      if (obj.result && typeof obj.result === 'object') {
-        const r = obj.result as Record<string, unknown>;
-        if (typeof r.url === 'string' && r.url) {
-          return r.url;
-        }
-      }
+      // 等第一个成功
+      const firstSuccess = await Promise.race(
+        promises.map(async (p) => {
+          const { result } = await p;
+          if (result) return result;
+          throw new Error('no result');
+        }),
+      );
+      return firstSuccess;
     } catch {
-      // ignore
+      // 全部失败,等所有完成
+      const results = await Promise.allSettled(promises);
+      for (const r of results) {
+        if (r.status === 'fulfilled' && r.value.result) {
+          return r.value.result;
+        }
+      }
+      return null;
     }
-    
-    return null;
   }
 
-  /**
-   * 列出所有已加载的音源
-   */
-  listSources(): Array<{ id: string; name: string; platforms: string[]; inited: boolean; stats: { successCalls: number; totalCalls: number } }> {
-    const result: Array<{ id: string; name: string; platforms: string[]; inited: boolean; stats: { successCalls: number; totalCalls: number } }> = [];
-    
-    for (const [id, rt] of this.runtimes) {
-      result.push({
-        id,
-        name: rt.getName(),
-        platforms: rt.getPlatforms(),
-        inited: rt.isInited(),
-        stats: rt.getStats()
-      });
-    }
-    
-    return result;
-  }
-
-  /**
-   * 获取已加载的音源数量
-   */
-  getSourceCount(): number {
-    return this.runtimes.size;
-  }
-
-  /**
-   * 检查是否有可用音源
-   */
+  /** 是否有任何已加载音源 */
   hasSources(): boolean {
     return this.runtimes.size > 0;
   }
 
-  /**
-   * 卸载一个音源
-   */
-  unloadSource(id: string): void {
-    const rt = this.runtimes.get(id);
-    if (rt) {
-      rt.destroy();
-      this.runtimes.delete(id);
-      this.updatePlatformIndex(rt);
-    }
+  /** 获取已加载音源数量 */
+  getSourceCount(): number {
+    return this.runtimes.size;
   }
 
-  /**
-   * 清理所有音源
-   */
-  clear(): void {
-    for (const rt of this.runtimes.values()) {
-      rt.destroy();
+  /** 列出所有已加载音源信息 */
+  listSources(): LoadedSourceInfo[] {
+    const list: LoadedSourceInfo[] = [];
+    for (const [, runtime] of this.runtimes) {
+      const stats = runtime.getStats();
+      list.push({
+        id: runtime.id,
+        name: runtime.name,
+        status: runtime.getStatus(),
+        platforms: runtime.getPlatforms(),
+        successCalls: stats.successCalls,
+        totalCalls: stats.totalCalls,
+      });
     }
+    return list;
+  }
+
+  /** 获取支持指定平台的所有 runtime ID */
+  getRuntimesForPlatform(platform: string): string[] {
+    return this.platformIndex.get(platform) || [];
+  }
+
+  /** 清理所有 */
+  async clear(): Promise<void> {
+    const destroyPromises: Promise<void>[] = [];
+    for (const [, runtime] of this.runtimes) {
+      destroyPromises.push(runtime.destroy());
+    }
+    await Promise.all(destroyPromises);
     this.runtimes.clear();
     this.platformIndex.clear();
   }

@@ -1,3 +1,2 @@
-"use strict";
-// 公共类型定义
-Object.defineProperty(exports, "__esModule", { value: true });
+// types.ts - 内部类型定义
+export {};

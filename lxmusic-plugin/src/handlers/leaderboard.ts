@@ -1,43 +1,41 @@
-import { kw, kg, tx, wy, mg } from '../musicSdk/facade';
-import { successResponse, errorResponse, badRequestResponse } from './response';
+// handlers/leaderboard.ts - 排行榜
 
-const platformModules: Record<string, any> = { kw, kg, tx, wy, mg };
+import { platformModules } from '../musicSdk/facade';
+import { success, error, badRequest } from './response';
+import type { RouteHandler } from '../@songloft/plugin-sdk';
 
-export function createLeaderboardHandlers() {
-  return {
-    async getBoards(req: unknown) {
-      try {
-        const query = (req as Record<string, unknown>).query as Record<string, string>;
-        const source_id = query.source_id || 'kw';
-        
-        const module = platformModules[source_id];
-        if (!module) return badRequestResponse('Unknown source');
-        
-        const result = await module.leaderboard.boards();
-        return successResponse(result);
-      } catch (e) {
-        return errorResponse('Failed to get leaderboards');
-      }
-    },
+/** 排行榜列表 */
+export const leaderboardBoards: RouteHandler = async (req) => {
+  try {
+    const q = req.query || {};
+    const sourceId = q.source_id || 'kw';
+    const mod = platformModules[sourceId];
+    if (!mod?.leaderboard?.boards) return badRequest('Unknown source or boards not supported');
 
-    async getList(req: unknown) {
-      try {
-        const query = (req as Record<string, unknown>).query as Record<string, string>;
-        const source_id = query.source_id || 'kw';
-        const id = query.id;
-        const page = Number(query.page) || 1;
-        const limit = Number(query.limit) || 20;
-        
-        if (!id) return badRequestResponse('ID is required');
-        
-        const module = platformModules[source_id];
-        if (!module) return badRequestResponse('Unknown source');
-        
-        const result = await module.leaderboard.list(id, page, limit);
-        return successResponse(result);
-      } catch (e) {
-        return errorResponse('Failed to get leaderboard list');
-      }
-    },
-  };
-}
+    const boards = await mod.leaderboard.boards();
+    return success(boards);
+  } catch (e) {
+    return error('Failed to get boards: ' + (e as Error).message);
+  }
+};
+
+/** 排行榜歌曲列表 */
+export const leaderboardList: RouteHandler = async (req) => {
+  try {
+    const q = req.query || {};
+    const sourceId = q.source_id || 'kw';
+    const id = q.id;
+    const page = Number(q.page) || 1;
+    const limit = Number(q.limit) || 20;
+
+    if (!id) return badRequest('id is required');
+
+    const mod = platformModules[sourceId];
+    if (!mod?.leaderboard?.list) return badRequest('Unknown source or list not supported');
+
+    const result = await mod.leaderboard.list(id, page, limit);
+    return success(result);
+  } catch (e) {
+    return error('Failed to get leaderboard list: ' + (e as Error).message);
+  }
+};

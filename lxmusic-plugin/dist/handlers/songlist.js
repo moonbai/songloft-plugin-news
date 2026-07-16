@@ -1,91 +1,93 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.createSongListHandlers = createSongListHandlers;
-const facade_1 = require("../musicSdk/facade");
-const response_1 = require("./response");
-const platformModules = { kw: facade_1.kw, kg: facade_1.kg, tx: facade_1.tx, wy: facade_1.wy, mg: facade_1.mg };
-function createSongListHandlers() {
-    return {
-        async getTags(req) {
-            try {
-                const query = req.query;
-                const source_id = query.source_id || 'kw';
-                const module = platformModules[source_id];
-                if (!module)
-                    return (0, response_1.badRequestResponse)('Unknown source');
-                const result = await module.songList.tags();
-                return (0, response_1.successResponse)(result);
-            }
-            catch (e) {
-                return (0, response_1.errorResponse)('Failed to get tags');
-            }
-        },
-        async getList(req) {
-            try {
-                const query = req.query;
-                const source_id = query.source_id || 'kw';
-                const tag = query.tag || '';
-                const page = Number(query.page) || 1;
-                const limit = Number(query.limit) || 20;
-                const module = platformModules[source_id];
-                if (!module)
-                    return (0, response_1.badRequestResponse)('Unknown source');
-                const result = await module.songList.list(tag, page, limit);
-                return (0, response_1.successResponse)(result);
-            }
-            catch (e) {
-                return (0, response_1.errorResponse)('Failed to get song list');
-            }
-        },
-        async getDetail(req) {
-            try {
-                const query = req.query;
-                const source_id = query.source_id || 'kw';
-                const id = query.id;
-                if (!id)
-                    return (0, response_1.badRequestResponse)('ID is required');
-                const module = platformModules[source_id];
-                if (!module)
-                    return (0, response_1.badRequestResponse)('Unknown source');
-                const result = await module.songList.detail(id);
-                return (0, response_1.successResponse)(result);
-            }
-            catch (e) {
-                return (0, response_1.errorResponse)('Failed to get song list detail');
-            }
-        },
-        async search(req) {
-            try {
-                const query = req.query;
-                const source_id = query.source_id || 'kw';
-                const keyword = query.keyword;
-                const page = Number(query.page) || 1;
-                const limit = Number(query.limit) || 20;
-                if (!keyword)
-                    return (0, response_1.badRequestResponse)('Keyword is required');
-                const module = platformModules[source_id];
-                if (!module)
-                    return (0, response_1.badRequestResponse)('Unknown source');
-                const result = await module.songList.search(keyword, page, limit);
-                return (0, response_1.successResponse)(result);
-            }
-            catch (e) {
-                return (0, response_1.errorResponse)('Failed to search song list');
-            }
-        },
-        async getSorts(req) {
-            try {
-                const query = req.query;
-                const source_id = query.source_id || 'kw';
-                const module = platformModules[source_id];
-                if (!module)
-                    return (0, response_1.badRequestResponse)('Unknown source');
-                const result = await module.songList.sorts();
-                return (0, response_1.successResponse)(result);
-            }
-            catch (e) {
-                return (0, response_1.errorResponse)('Failed to get sorts');
-            }
-        },
-    };
+// handlers/songlist.ts - 歌单浏览 (转发 musicSdk)
+import { platformModules } from '../musicSdk/facade';
+import { success, error, badRequest } from './response';
+function getQuery(req) {
+    return req.query || {};
 }
+/** 歌单标签 */
+export const songlistTags = async (req) => {
+    try {
+        const q = getQuery(req);
+        const sourceId = q.source_id || 'kw';
+        const mod = platformModules[sourceId];
+        if (!mod?.songList?.tags)
+            return badRequest('Unknown source or tags not supported');
+        const tags = await mod.songList.tags();
+        return success(tags);
+    }
+    catch (e) {
+        return error('Failed to get tags: ' + e.message);
+    }
+};
+/** 歌单列表 */
+export const songlistList = async (req) => {
+    try {
+        const q = getQuery(req);
+        const sourceId = q.source_id || 'kw';
+        const tag = q.tag || '';
+        const page = Number(q.page) || 1;
+        const limit = Number(q.limit) || 20;
+        const mod = platformModules[sourceId];
+        if (!mod?.songList?.list)
+            return badRequest('Unknown source or list not supported');
+        const result = await mod.songList.list(tag, page, limit);
+        return success(result);
+    }
+    catch (e) {
+        return error('Failed to get songlist: ' + e.message);
+    }
+};
+/** 歌单详情 */
+export const songlistDetail = async (req) => {
+    try {
+        const q = getQuery(req);
+        const sourceId = q.source_id || 'kw';
+        const id = q.id;
+        const page = Number(q.page) || 1;
+        if (!id)
+            return badRequest('id is required');
+        const mod = platformModules[sourceId];
+        if (!mod?.songList?.detail)
+            return badRequest('Unknown source or detail not supported');
+        const result = await mod.songList.detail(id, page);
+        return success(result);
+    }
+    catch (e) {
+        return error('Failed to get detail: ' + e.message);
+    }
+};
+/** 歌单搜索 */
+export const songlistSearch = async (req) => {
+    try {
+        const q = getQuery(req);
+        const sourceId = q.source_id || 'kw';
+        const keyword = q.keyword || '';
+        const page = Number(q.page) || 1;
+        const limit = Number(q.limit) || 20;
+        if (!keyword)
+            return badRequest('keyword is required');
+        const mod = platformModules[sourceId];
+        if (!mod?.songList?.search)
+            return badRequest('Unknown source or search not supported');
+        const result = await mod.songList.search(keyword, page, limit);
+        return success(result);
+    }
+    catch (e) {
+        return error('Failed to search songlist: ' + e.message);
+    }
+};
+/** 歌单分类 */
+export const songlistSorts = async (req) => {
+    try {
+        const q = getQuery(req);
+        const sourceId = q.source_id || 'kw';
+        const mod = platformModules[sourceId];
+        if (!mod?.songList?.sorts)
+            return badRequest('Unknown source or sorts not supported');
+        const sorts = await mod.songList.sorts();
+        return success(sorts);
+    }
+    catch (e) {
+        return error('Failed to get sorts: ' + e.message);
+    }
+};

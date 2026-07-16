@@ -1,18 +1,2 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.badRequestResponse = exports.errorResponse = exports.successResponse = exports.jsonResponse = exports.createDirectHandlers = exports.createLeaderboardHandlers = exports.createSongListHandlers = exports.createSourceHandlers = exports.createSearchHandlers = void 0;
-var search_1 = require("./search");
-Object.defineProperty(exports, "createSearchHandlers", { enumerable: true, get: function () { return search_1.createSearchHandlers; } });
-var source_1 = require("./source");
-Object.defineProperty(exports, "createSourceHandlers", { enumerable: true, get: function () { return source_1.createSourceHandlers; } });
-var songlist_1 = require("./songlist");
-Object.defineProperty(exports, "createSongListHandlers", { enumerable: true, get: function () { return songlist_1.createSongListHandlers; } });
-var leaderboard_1 = require("./leaderboard");
-Object.defineProperty(exports, "createLeaderboardHandlers", { enumerable: true, get: function () { return leaderboard_1.createLeaderboardHandlers; } });
-var direct_1 = require("./direct");
-Object.defineProperty(exports, "createDirectHandlers", { enumerable: true, get: function () { return direct_1.createDirectHandlers; } });
-var response_1 = require("./response");
-Object.defineProperty(exports, "jsonResponse", { enumerable: true, get: function () { return response_1.jsonResponse; } });
-Object.defineProperty(exports, "successResponse", { enumerable: true, get: function () { return response_1.successResponse; } });
-Object.defineProperty(exports, "errorResponse", { enumerable: true, get: function () { return response_1.errorResponse; } });
-Object.defineProperty(exports, "badRequestResponse", { enumerable: true, get: function () { return response_1.badRequestResponse; } });
+// handlers/index.ts - handler 模块导出
+export { success, error, badRequest, notFound, successWithWarning, jsonResponse } from './response';

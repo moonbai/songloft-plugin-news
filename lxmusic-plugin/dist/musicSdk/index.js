@@ -1,92 +1,103 @@
-"use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
+// musicSdk/index.ts - 共享工具函数 (移植自 lxserver modules/utils/index.js)
+// ============ 全局兼容 ============
+// 混淆脚本/平台代码可能引用 global/window
+globalThis.window = globalThis;
+globalThis.global = globalThis;
+// ============ 格式化工具 ============
+/** 文件大小格式化 */
+export function sizeFormate(size) {
+    if (size === undefined || size === null || isNaN(size))
+        return '0B';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let index = 0;
+    let s = size;
+    while (s >= 1024 && index < units.length - 1) {
+        s /= 1024;
+        index++;
     }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __exportStar = (this && this.__exportStar) || function(m, exports) {
-    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.httpFetch = void 0;
-exports.sizeFormate = sizeFormate;
-exports.decodeName = decodeName;
-exports.formatPlayTime = formatPlayTime;
-exports.formatPlayTimeMs = formatPlayTimeMs;
-exports.dateFormat = dateFormat;
-exports.formatPlayCount = formatPlayCount;
-exports.getQuality = getQuality;
-exports.generateRandomId = generateRandomId;
-function sizeFormate(size) {
-    if (size < 1024)
-        return size + 'B';
-    if (size < 1024 * 1024)
-        return (size / 1024).toFixed(2) + 'KB';
-    if (size < 1024 * 1024 * 1024)
-        return (size / (1024 * 1024)).toFixed(2) + 'MB';
-    return (size / (1024 * 1024 * 1024)).toFixed(2) + 'GB';
+    return s.toFixed(2) + units[index];
 }
-function decodeName(name) {
+/** 解码文件名 (去除可能的前后引号/转义) */
+export function decodeName(name) {
+    if (!name)
+        return '';
     try {
-        return decodeURIComponent(name.replace(/\+/g, '%20'));
+        // 尝试 decodeURIComponent
+        return decodeURIComponent(name);
     }
     catch {
         return name;
     }
 }
-function formatPlayTime(time) {
-    const minutes = Math.floor(time / 60);
-    const seconds = Math.floor(time % 60);
-    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+/** 格式化播放时间 (秒 → mm:ss) */
+export function formatPlayTime(time) {
+    if (!time || time <= 0)
+        return '00:00';
+    const m = Math.floor(time / 60);
+    const s = Math.floor(time % 60);
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 }
-function formatPlayTimeMs(time) {
-    return formatPlayTime(time / 1000);
-}
-function dateFormat(timestamp, format = 'YYYY-MM-DD HH:mm:ss') {
-    const date = new Date(timestamp * 1000);
-    const year = date.getFullYear();
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const day = date.getDate().toString().padStart(2, '0');
-    const hours = date.getHours().toString().padStart(2, '0');
-    const minutes = date.getMinutes().toString().padStart(2, '0');
-    const seconds = date.getSeconds().toString().padStart(2, '0');
+/** 日期格式化 */
+export function dateFormat(date, format = 'YYYY-MM-DD HH:mm:ss') {
+    const d = new Date(date);
+    if (isNaN(d.getTime()))
+        return '';
+    const pad = (n) => n.toString().padStart(2, '0');
     return format
-        .replace('YYYY', year.toString())
-        .replace('MM', month)
-        .replace('DD', day)
-        .replace('HH', hours)
-        .replace('mm', minutes)
-        .replace('ss', seconds);
+        .replace('YYYY', d.getFullYear().toString())
+        .replace('MM', pad(d.getMonth() + 1))
+        .replace('DD', pad(d.getDate()))
+        .replace('HH', pad(d.getHours()))
+        .replace('mm', pad(d.getMinutes()))
+        .replace('ss', pad(d.getSeconds()));
 }
-function formatPlayCount(count) {
-    if (count < 10000)
-        return count.toString();
-    if (count < 100000000)
-        return (count / 10000).toFixed(1) + '万';
-    return (count / 100000000).toFixed(1) + '亿';
+/** 格式化播放次数 */
+export function formatPlayCount(count) {
+    const n = Number(count);
+    if (isNaN(n))
+        return '0';
+    if (n < 10000)
+        return n.toString();
+    if (n < 100000000)
+        return (n / 10000).toFixed(1) + '万';
+    return (n / 100000000).toFixed(1) + '亿';
 }
-function getQuality(quality) {
-    const map = {
-        '128k': '128kbps',
-        '320k': '320kbps',
-        'flac': '无损',
-        'ape': 'APE',
-        'hq': '高品质',
-        'sq': '无损',
-        'exhigh': '极高',
-        'standard': '标准',
-    };
-    return map[quality] || quality;
+// ============ 防御性字段读取 ============
+/** 从对象中取值,大小写不敏感 */
+export function getField(obj, ...keys) {
+    for (const key of keys) {
+        if (obj[key] !== undefined && obj[key] !== null && obj[key] !== '') {
+            return obj[key];
+        }
+        // 首字母大写
+        const capKey = key.charAt(0).toUpperCase() + key.slice(1);
+        if (obj[capKey] !== undefined && obj[capKey] !== null && obj[capKey] !== '') {
+            return obj[capKey];
+        }
+    }
+    return undefined;
 }
-function generateRandomId() {
-    return Math.random().toString(36).substring(2, 15);
+/** 归一化 songInfo: musicId/songmid 互为 fallback */
+export function normalizeSongInfo(song) {
+    const result = { ...song };
+    const musicId = getField(result, 'musicId', 'songmid', 'hash', 'copyrightId');
+    if (musicId) {
+        if (!result.musicId)
+            result.musicId = String(musicId);
+        if (!result.songmid)
+            result.songmid = String(musicId);
+    }
+    return result;
 }
-var request_1 = require("./request");
-Object.defineProperty(exports, "httpFetch", { enumerable: true, get: function () { return request_1.httpFetch; } });
-__exportStar(require("./crypto-shim"), exports);
+// ============ 通用 defer ============
+export function defer() {
+    let resolve;
+    let reject;
+    const promise = new Promise((res, rej) => {
+        resolve = res;
+        reject = rej;
+    });
+    return { promise, resolve, reject };
+}
+// 重新导出 crypto-shim 方便平台代码引用
+export * from './crypto-shim';

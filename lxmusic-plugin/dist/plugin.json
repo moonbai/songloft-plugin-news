@@ -5,8 +5,8 @@
   "main": "main.js",
   "minHostVersion": "1.0.0",
   "permissions": ["storage", "songs.read", "songs.write", "playlists.read", "playlists.write", "jsenv", "http_request"],
-  "entryHash": "468bdb1f519a4ace8de69412696dfd7d",
-  "zipHash": "8d6b11766ab5e9b91c83fcc7106ba402",
+  "entryHash": "7fba2860ae9f514f2b73f6c332197ec1",
+  "zipHash": "c3ea4c79d0ba4daa9eadcbddf742b3c3",
   "description": "LX Music Source Plugin - 多平台音乐搜索与播放",
   "author": "hanxi"
 }

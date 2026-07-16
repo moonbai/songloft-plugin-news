@@ -1,0 +1,65 @@
+name: Release Plugin
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version (leave empty for auto date-based)'
+        required: false
+        default: ''
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: cd lxmusic-plugin && npm install
+
+      - name: Build plugin
+        run: |
+          cd lxmusic-plugin
+          npm run build
+          ./../build-plugin.sh .
+
+      - name: Generate version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=$(date +'%Y.%m.%d')" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Update plugin.json version
+        run: |
+          cd lxmusic-plugin
+          VERSION="${{ steps.version.outputs.version }}"
+          sed -i "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" plugin.json
+          sed -i "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" dist/plugin.json
+
+      - name: Read hashes
+        id: hashes
+        run: |
+          cd lxmusic-plugin/dist
+          echo "entry_hash=$(grep -o '"entryHash": "[^"]*"' plugin.json | cut -d'"' -f4)" >> $GITHUB_OUTPUT
+          echo "zip_hash=$(grep -o '"zipHash": "[^"]*"' plugin.json | cut -d'"' -f4)" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: lxmusic-plugin ${{ steps.version.outputs.version }}
+          files: lxmusic-plugin/dist/lxmusic-plugin.jsplugin.zip
+          body: |
+            ## lxmusic plugin ${{ steps.version.outputs.version }}
+
+            - entryHash: ${{ steps.hashes.outputs.entry_hash }}
+            - zipHash: ${{ steps.hashes.outputs.zip_hash }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
