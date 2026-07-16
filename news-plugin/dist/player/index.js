@@ -1,0 +1,16 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.estimateSpeechDuration = exports.buildTtsScript = exports.getDefaultTtsConfig = exports.setTtsConfig = exports.getTtsConfig = exports.clearPlaylist = exports.removeFromPlaylist = exports.addToPlaylist = exports.getDefaultPlaylist = exports.setPlaylists = exports.getPlaylists = void 0;
+var storage_1 = require("./storage");
+Object.defineProperty(exports, "getPlaylists", { enumerable: true, get: function () { return storage_1.getPlaylists; } });
+Object.defineProperty(exports, "setPlaylists", { enumerable: true, get: function () { return storage_1.setPlaylists; } });
+Object.defineProperty(exports, "getDefaultPlaylist", { enumerable: true, get: function () { return storage_1.getDefaultPlaylist; } });
+Object.defineProperty(exports, "addToPlaylist", { enumerable: true, get: function () { return storage_1.addToPlaylist; } });
+Object.defineProperty(exports, "removeFromPlaylist", { enumerable: true, get: function () { return storage_1.removeFromPlaylist; } });
+Object.defineProperty(exports, "clearPlaylist", { enumerable: true, get: function () { return storage_1.clearPlaylist; } });
+Object.defineProperty(exports, "getTtsConfig", { enumerable: true, get: function () { return storage_1.getTtsConfig; } });
+Object.defineProperty(exports, "setTtsConfig", { enumerable: true, get: function () { return storage_1.setTtsConfig; } });
+Object.defineProperty(exports, "getDefaultTtsConfig", { enumerable: true, get: function () { return storage_1.getDefaultTtsConfig; } });
+var tts_1 = require("./tts");
+Object.defineProperty(exports, "buildTtsScript", { enumerable: true, get: function () { return tts_1.buildTtsScript; } });
+Object.defineProperty(exports, "estimateSpeechDuration", { enumerable: true, get: function () { return tts_1.estimateSpeechDuration; } });

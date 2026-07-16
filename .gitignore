@@ -1,4 +1,8 @@
 node_modules/
-dist/
 *.log
 .DS_Store
+
+# 保留构建产物
+# dist/ 目录需要上传
+!**/dist/*.jsplugin.zip
+!**/dist/plugin.json

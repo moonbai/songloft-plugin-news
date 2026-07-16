@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LX Music Plugin</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <h1>LX Music Source Plugin</h1>
+      <p>Search and import music from multiple platforms</p>
+    </header>
+
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="search">Search</button>
+      <button class="tab-btn" data-tab="sources">Sources</button>
+      <button class="tab-btn" data-tab="playlists">Playlists</button>
+    </div>
+
+    <div class="tab-content">
+      <div id="search" class="tab-pane active">
+        <div class="search-bar">
+          <select id="source-select">
+            <option value="kw">KuWo</option>
+            <option value="kg">KuGou</option>
+            <option value="tx">QQ Music</option>
+            <option value="wy">NetEase</option>
+            <option value="mg">Migu</option>
+          </select>
+          <input type="text" id="search-input" placeholder="Search for music...">
+          <button id="search-btn">Search</button>
+        </div>
+        
+        <div class="search-options">
+          <label>
+            <span>Quality:</span>
+            <select id="quality-select">
+              <option value="standard">Standard</option>
+              <option value="128k">128kbps</option>
+              <option value="320k">320kbps</option>
+              <option value="flac">FLAC</option>
+            </select>
+          </label>
+        </div>
+
+        <div id="search-results" class="results"></div>
+
+        <div class="import-bar">
+          <button id="import-all-btn" disabled>Import All</button>
+          <button id="import-selected-btn" disabled>Import Selected</button>
+        </div>
+      </div>
+
+      <div id="sources" class="tab-pane">
+        <div class="source-actions">
+          <input type="file" id="source-file" accept=".js,.zip" multiple>
+          <button id="import-file-btn">Import File</button>
+          <input type="text" id="source-url" placeholder="Source URL...">
+          <button id="import-url-btn">Import URL</button>
+          <button id="reload-sources-btn">Reload All</button>
+        </div>
+
+        <div id="source-list" class="source-list"></div>
+      </div>
+
+      <div id="playlists" class="tab-pane">
+        <div class="playlist-actions">
+          <input type="text" id="playlist-name" placeholder="Playlist name...">
+          <input type="text" id="playlist-desc" placeholder="Description...">
+          <button id="create-playlist-btn">Create Playlist</button>
+        </div>
+
+        <div id="playlist-list" class="playlist-list"></div>
+      </div>
+    </div>
+
+    <footer class="footer">
+      <p>⚠️ Disclaimer: For personal study only. Do not use for commercial purposes.</p>
+    </footer>
+  </div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
