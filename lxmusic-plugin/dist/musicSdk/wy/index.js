@@ -1,4 +1,9 @@
-import httpFetch from '../request';
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const request_1 = __importDefault(require("../request"));
 function normalizeSong(song) {
     return {
         name: String(song.name || song.songName || ''),
@@ -14,7 +19,7 @@ function normalizeSong(song) {
 const musicSearch = {
     async search(keyword, page, limit) {
         const url = `http://music.163.com/api/search/get/web?csrf_token=&type=1&s=${encodeURIComponent(keyword)}&offset=${(page - 1) * limit}&limit=${limit}`;
-        const { body } = await httpFetch(url).promise;
+        const { body } = await (0, request_1.default)(url).promise;
         const data = body;
         const songs = (data.result?.songs || []).map(normalizeSong);
         return { songs, total: Number(data.result?.songCount || songs.length) };
@@ -25,7 +30,7 @@ async function getLyric(songInfo) {
     if (!musicId)
         return null;
     const url = `http://music.163.com/api/song/lyric?id=${musicId}&lv=-1&kv=-1&tv=-1`;
-    const { body } = await httpFetch(url).promise;
+    const { body } = await (0, request_1.default)(url).promise;
     const data = body;
     if (data && typeof data === 'object') {
         return {
@@ -43,7 +48,7 @@ const songList = {
     },
     async detail(id) {
         const url = `http://music.163.com/api/playlist/detail?id=${id}`;
-        const { body } = await httpFetch(url).promise;
+        const { body } = await (0, request_1.default)(url).promise;
         const data = body;
         const songs = (data.result?.tracks || []).map(normalizeSong);
         return { songs };
@@ -69,4 +74,4 @@ const wy = {
     songList,
     leaderboard,
 };
-export default wy;
+exports.default = wy;

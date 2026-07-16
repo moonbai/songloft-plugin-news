@@ -1,9 +1,4 @@
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-const request_1 = __importDefault(require("../request"));
+import httpFetch from '../request';
 function normalizeArticle(article) {
     return {
         id: String(article.contId || article.cont_id || article.id || ''),
@@ -22,7 +17,7 @@ function normalizeArticle(article) {
 const newsList = {
     async list(category, page, limit) {
         const url = `https://www.thepaper.cn/load_index.jsp?nodeids=${category || '25950'}&pageIdx=${page}&topCids=&parentCid=&pageSize=${limit}&actionType=`;
-        const resp = await (0, request_1.default)(url, {
+        const resp = await httpFetch(url, {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
                 'Referer': 'https://www.thepaper.cn/',
@@ -46,7 +41,7 @@ const newsList = {
 const newsDetail = {
     async detail(id) {
         const url = `https://www.thepaper.cn/newsDetail_forward_${id}`;
-        const resp = await (0, request_1.default)(url, {
+        const resp = await httpFetch(url, {
             headers: { 'User-Agent': 'Mozilla/5.0' },
         });
         const raw = String(resp.body || '');
@@ -67,7 +62,7 @@ const newsDetail = {
 const newsSearch = {
     async search(keyword, page, limit) {
         const url = `https://www.thepaper.cn/searchResult?searchWord=${encodeURIComponent(keyword)}&pageSearch=${page}`;
-        const resp = await (0, request_1.default)(url, {
+        const resp = await httpFetch(url, {
             headers: { 'User-Agent': 'Mozilla/5.0' },
         });
         const data = resp.body;
@@ -91,4 +86,4 @@ const pengpai = {
     newsSearch,
     hotboard,
 };
-exports.default = pengpai;
+export default pengpai;

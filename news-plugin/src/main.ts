@@ -1,4 +1,4 @@
-import { createRouter, jsonResponse } from '@songloft/plugin-sdk';
+import { createRouter, jsonResponse } from './@songloft/plugin-sdk';
 import { RuntimeManager } from './engine';
 import { SourceManager } from './source';
 import { sources } from './newsSdk/facade';

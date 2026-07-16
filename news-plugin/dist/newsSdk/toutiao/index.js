@@ -1,9 +1,4 @@
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-const request_1 = __importDefault(require("../request"));
+import httpFetch from '../request';
 function normalizeArticle(article) {
     return {
         id: String(article.item_id || article.article_id || article.id || article.group_id || ''),
@@ -23,7 +18,7 @@ const newsList = {
     async list(category, page, limit) {
         const offset = (page - 1) * limit;
         const url = `https://www.toutiao.com/api/pc/list/feed?category=${category || '__all__'}&visit_user_id=&offset=${offset}&count=${limit}`;
-        const resp = await (0, request_1.default)(url, {
+        const resp = await httpFetch(url, {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             },
@@ -47,7 +42,7 @@ const newsList = {
 const newsDetail = {
     async detail(id) {
         const url = `https://www.toutiao.com/i${id}/`;
-        const resp = await (0, request_1.default)(url, {
+        const resp = await httpFetch(url, {
             headers: { 'User-Agent': 'Mozilla/5.0' },
         });
         const raw = String(resp.body || '');
@@ -70,7 +65,7 @@ const newsSearch = {
     async search(keyword, page, limit) {
         const offset = (page - 1) * limit;
         const url = `https://www.toutiao.com/search/keyword/?keyword=${encodeURIComponent(keyword)}&pd=information&action_type=search&offset=${offset}&count=${limit}`;
-        const resp = await (0, request_1.default)(url, {
+        const resp = await httpFetch(url, {
             headers: { 'User-Agent': 'Mozilla/5.0' },
         });
         const data = resp.body;
@@ -94,4 +89,4 @@ const toutiao = {
     newsSearch,
     hotboard,
 };
-exports.default = toutiao;
+export default toutiao;

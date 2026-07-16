@@ -1,11 +1,8 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.createPlayerHandlers = createPlayerHandlers;
 // 播放器 HTTP 处理
-const facade_1 = require("../newsSdk/facade");
-const response_1 = require("./response");
-const player_1 = require("../player");
-function createPlayerHandlers() {
+import { platformModules } from '../newsSdk/facade';
+import { successResponse, errorResponse, badRequestResponse } from './response';
+import { getPlaylists, addToPlaylist, removeFromPlaylist, clearPlaylist, getTtsConfig, setTtsConfig, buildTtsScript, } from '../player';
+export function createPlayerHandlers() {
     return {
         /**
          * 解析新闻的播放信息（包含 audioUrl、是否支持 TTS 等）
@@ -15,14 +12,14 @@ function createPlayerHandlers() {
                 const request = req;
                 const body = request.body;
                 if (!body)
-                    return (0, response_1.badRequestResponse)('No body');
+                    return badRequestResponse('No body');
                 const text = new TextDecoder().decode(body);
                 const parsed = JSON.parse(text);
                 const news = parsed.news;
                 const enableTts = parsed.enableTts !== false;
                 if (!news)
-                    return (0, response_1.badRequestResponse)('news is required');
-                const module = facade_1.platformModules[news.source];
+                    return badRequestResponse('news is required');
+                const module = platformModules[news.source];
                 let audioUrl = news.audioUrl;
                 let audioDuration = news.audioDuration;
                 let content = news.content;
@@ -40,8 +37,8 @@ function createPlayerHandlers() {
                         // 忽略
                     }
                 }
-                const ttsScript = enableTts ? (0, player_1.buildTtsScript)(news, content) : null;
-                return (0, response_1.successResponse)({
+                const ttsScript = enableTts ? buildTtsScript(news, content) : null;
+                return successResponse({
                     news: { ...news, audioUrl, audioDuration, content },
                     audioUrl: audioUrl || null,
                     audioDuration: audioDuration || 0,
@@ -51,7 +48,7 @@ function createPlayerHandlers() {
                 });
             }
             catch (e) {
-                return (0, response_1.errorResponse)('Resolve failed: ' + e.message);
+                return errorResponse('Resolve failed: ' + e.message);
             }
         },
         /**
@@ -62,13 +59,13 @@ function createPlayerHandlers() {
                 const request = req;
                 const body = request.body;
                 if (!body)
-                    return (0, response_1.badRequestResponse)('No body');
+                    return badRequestResponse('No body');
                 const text = new TextDecoder().decode(body);
                 const parsed = JSON.parse(text);
                 const news = parsed.news;
                 const listName = String(parsed.listName || 'default');
                 if (!news)
-                    return (0, response_1.badRequestResponse)('news is required');
+                    return badRequestResponse('news is required');
                 const item = {
                     id: news.id,
                     title: news.title,
@@ -82,11 +79,11 @@ function createPlayerHandlers() {
                     publishTime: news.publishTime,
                     addTime: Date.now(),
                 };
-                const success = (0, player_1.addToPlaylist)(item, listName);
-                return (0, response_1.successResponse)({ success, message: success ? '已添加' : '已在列表中' });
+                const success = addToPlaylist(item, listName);
+                return successResponse({ success, message: success ? '已添加' : '已在列表中' });
             }
             catch (e) {
-                return (0, response_1.errorResponse)('Add failed: ' + e.message);
+                return errorResponse('Add failed: ' + e.message);
             }
         },
         /**
@@ -100,12 +97,12 @@ function createPlayerHandlers() {
                 const source = String(query.source || '');
                 const listName = String(query.listName || 'default');
                 if (!id || !source)
-                    return (0, response_1.badRequestResponse)('id and source are required');
-                const success = (0, player_1.removeFromPlaylist)(id, source, listName);
-                return (0, response_1.successResponse)({ success });
+                    return badRequestResponse('id and source are required');
+                const success = removeFromPlaylist(id, source, listName);
+                return successResponse({ success });
             }
             catch (e) {
-                return (0, response_1.errorResponse)('Remove failed: ' + e.message);
+                return errorResponse('Remove failed: ' + e.message);
             }
         },
         /**
@@ -115,12 +112,12 @@ function createPlayerHandlers() {
             try {
                 const request = req;
                 const listName = String(request.query?.listName || 'default');
-                const all = (0, player_1.getPlaylists)();
+                const all = getPlaylists();
                 const list = all.find(p => p.name === listName) || { name: listName, items: [] };
-                return (0, response_1.successResponse)(list);
+                return successResponse(list);
             }
             catch (e) {
-                return (0, response_1.errorResponse)('Get list failed: ' + e.message);
+                return errorResponse('Get list failed: ' + e.message);
             }
         },
         /**
@@ -130,11 +127,11 @@ function createPlayerHandlers() {
             try {
                 const request = req;
                 const listName = String(request.query?.listName || 'default');
-                (0, player_1.clearPlaylist)(listName);
-                return (0, response_1.successResponse)({ success: true });
+                clearPlaylist(listName);
+                return successResponse({ success: true });
             }
             catch (e) {
-                return (0, response_1.errorResponse)('Clear failed: ' + e.message);
+                return errorResponse('Clear failed: ' + e.message);
             }
         },
         /**
@@ -142,11 +139,11 @@ function createPlayerHandlers() {
          */
         async getTtsConfig(req) {
             try {
-                const config = (0, player_1.getTtsConfig)();
-                return (0, response_1.successResponse)(config);
+                const config = getTtsConfig();
+                return successResponse(config);
             }
             catch (e) {
-                return (0, response_1.errorResponse)('Get TTS config failed');
+                return errorResponse('Get TTS config failed');
             }
         },
         /**
@@ -157,14 +154,14 @@ function createPlayerHandlers() {
                 const request = req;
                 const body = request.body;
                 if (!body)
-                    return (0, response_1.badRequestResponse)('No body');
+                    return badRequestResponse('No body');
                 const text = new TextDecoder().decode(body);
                 const config = JSON.parse(text);
-                (0, player_1.setTtsConfig)(config);
-                return (0, response_1.successResponse)({ success: true });
+                setTtsConfig(config);
+                return successResponse({ success: true });
             }
             catch (e) {
-                return (0, response_1.errorResponse)('Save TTS config failed');
+                return errorResponse('Save TTS config failed');
             }
         },
         /**
@@ -178,7 +175,7 @@ function createPlayerHandlers() {
                 const platforms = ['ximalaya', 'dedao', 'toutiao', 'wangyi', 'pengpai'];
                 const promises = platforms.map(async (sourceId) => {
                     try {
-                        const module = facade_1.platformModules[sourceId];
+                        const module = platformModules[sourceId];
                         if (!module)
                             return { source: sourceId, news: [] };
                         const result = await module.newsList.list('', 1, Math.ceil(limit / platforms.length));
@@ -201,13 +198,13 @@ function createPlayerHandlers() {
                 }
                 // 按发布时间倒序
                 allNews.sort((a, b) => b.publishTime - a.publishTime);
-                return (0, response_1.successResponse)({
+                return successResponse({
                     news: allNews.slice(0, limit),
                     total: allNews.length,
                 });
             }
             catch (e) {
-                return (0, response_1.errorResponse)('Get playable failed: ' + e.message);
+                return errorResponse('Get playable failed: ' + e.message);
             }
         },
     };

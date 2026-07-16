@@ -1,16 +1,14 @@
-import type { SourceManager } from '../source';
-import { successResponse, errorResponse, badRequestResponse } from './response';
+// 音源管理处理器
+
+import { SourceManager } from '../source';
+import { successResponse, errorResponse } from './response';
 
 export function createSourceHandlers(sourceManager: SourceManager) {
   return {
     async getSources(req: unknown) {
       try {
-        const sources = sourceManager.getAll();
-        const batchStatus = sourceManager.getBatchStatus();
-        return successResponse({
-          sources,
-          batch_status: batchStatus,
-        });
+        const sources = sourceManager.list();
+        return successResponse({ sources });
       } catch (e) {
         return errorResponse('Failed to get sources');
       }
@@ -18,85 +16,82 @@ export function createSourceHandlers(sourceManager: SourceManager) {
 
     async importSource(req: unknown) {
       try {
-        const body = (req as Record<string, unknown>).body as Uint8Array | null;
-        if (!body) return badRequestResponse('No body provided');
+        const r = req as any;
+        const body = r.body as Uint8Array | null;
+        if (!body) return errorResponse('No body', 400);
         
-        const content = Array.from(body).map(b => String.fromCharCode(b)).join('');
-        const files = content.match(/Content-Disposition: form-data; name="files"; filename="(.+?)"/);
+        const text = new TextDecoder().decode(body);
+        const parsed = JSON.parse(text) as Record<string, unknown>;
+        const name = String(parsed.name || 'imported');
+        const content = String(parsed.content || '');
         
-        if (files) {
-          const filename = files[1];
-          if (filename.endsWith('.zip')) {
-            const result = await sourceManager.importZip(content);
-            return successResponse(result);
-          } else if (filename.endsWith('.js')) {
-            const result = await sourceManager.importScript(content, filename);
-            return successResponse([result]);
-          }
-        }
+        if (!content) return errorResponse('content required', 400);
         
-        return badRequestResponse('Unsupported file type');
+        const source = sourceManager.importJs(name, content);
+        return successResponse({ source });
       } catch (e) {
-        return errorResponse('Failed to import source');
+        return errorResponse('Import failed: ' + (e as Error).message);
       }
     },
 
     async importSourceUrl(req: unknown) {
       try {
-        const body = (req as Record<string, unknown>).body as Uint8Array | null;
-        if (!body) return badRequestResponse('No body provided');
+        const r = req as any;
+        const body = r.body as Uint8Array | null;
+        if (!body) return errorResponse('No body', 400);
         
-        const content = Array.from(body).map(b => String.fromCharCode(b)).join('');
-        const parsed = JSON.parse(content);
-        const url = parsed.url;
+        const text = new TextDecoder().decode(body);
+        const parsed = JSON.parse(text) as Record<string, unknown>;
+        const url = String(parsed.url);
         
-        if (!url) return badRequestResponse('URL is required');
+        if (!url) return errorResponse('url required', 400);
         
-        const result = await sourceManager.importUrl(url);
-        return successResponse(result);
+        const result = await sourceManager.importFromUrl(url);
+        return successResponse({ sources: Array.isArray(result) ? result : [result] });
       } catch (e) {
-        return errorResponse('Failed to import source from URL');
+        return errorResponse('Import from URL failed: ' + (e as Error).message);
       }
     },
 
     async deleteSource(req: unknown) {
       try {
-        const query = (req as Record<string, unknown>).query as Record<string, string>;
+        const r = req as any;
+        const query = r.query as Record<string, string>;
         const id = query.id;
         
-        if (!id) return badRequestResponse('ID is required');
+        if (!id) return errorResponse('id required', 400);
         
-        await sourceManager.remove(id);
-        return successResponse(null, 'Deleted');
+        const success = sourceManager.delete(id);
+        return successResponse({ success });
       } catch (e) {
-        return errorResponse('Failed to delete source');
+        return errorResponse('Delete failed');
       }
     },
 
     async toggleSource(req: unknown) {
       try {
-        const body = (req as Record<string, unknown>).body as Uint8Array | null;
-        if (!body) return badRequestResponse('No body provided');
+        const r = req as any;
+        const body = r.body as Uint8Array | null;
+        if (!body) return errorResponse('No body', 400);
         
-        const content = Array.from(body).map(b => String.fromCharCode(b)).join('');
-        const parsed = JSON.parse(content);
-        const id = parsed.id;
+        const text = new TextDecoder().decode(body);
+        const parsed = JSON.parse(text) as Record<string, unknown>;
+        const id = String(parsed.id);
+        const enabled = Boolean(parsed.enabled);
         
-        if (!id) return badRequestResponse('ID is required');
-        
-        const enabled = await sourceManager.toggle(id);
-        return successResponse({ enabled });
+        const success = sourceManager.setEnabled(id, enabled);
+        return successResponse({ success });
       } catch (e) {
-        return errorResponse('Failed to toggle source');
+        return errorResponse('Toggle failed');
       }
     },
 
     async reloadSources(req: unknown) {
       try {
-        await sourceManager.reloadAll();
-        return successResponse(null, 'Reloading');
+        await sourceManager.reloadAll(sourceManager as any);
+        return successResponse({ success: true });
       } catch (e) {
-        return errorResponse('Failed to reload sources');
+        return errorResponse('Reload failed');
       }
     },
   };

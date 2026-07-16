@@ -1,7 +1,10 @@
-import { kw, kg, tx, wy, mg } from '../musicSdk/facade';
-import { successResponse, errorResponse, badRequestResponse } from './response';
-const platformModules = { kw, kg, tx, wy, mg };
-export function createSongListHandlers() {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.createSongListHandlers = createSongListHandlers;
+const facade_1 = require("../musicSdk/facade");
+const response_1 = require("./response");
+const platformModules = { kw: facade_1.kw, kg: facade_1.kg, tx: facade_1.tx, wy: facade_1.wy, mg: facade_1.mg };
+function createSongListHandlers() {
     return {
         async getTags(req) {
             try {
@@ -9,12 +12,12 @@ export function createSongListHandlers() {
                 const source_id = query.source_id || 'kw';
                 const module = platformModules[source_id];
                 if (!module)
-                    return badRequestResponse('Unknown source');
+                    return (0, response_1.badRequestResponse)('Unknown source');
                 const result = await module.songList.tags();
-                return successResponse(result);
+                return (0, response_1.successResponse)(result);
             }
             catch (e) {
-                return errorResponse('Failed to get tags');
+                return (0, response_1.errorResponse)('Failed to get tags');
             }
         },
         async getList(req) {
@@ -26,12 +29,12 @@ export function createSongListHandlers() {
                 const limit = Number(query.limit) || 20;
                 const module = platformModules[source_id];
                 if (!module)
-                    return badRequestResponse('Unknown source');
+                    return (0, response_1.badRequestResponse)('Unknown source');
                 const result = await module.songList.list(tag, page, limit);
-                return successResponse(result);
+                return (0, response_1.successResponse)(result);
             }
             catch (e) {
-                return errorResponse('Failed to get song list');
+                return (0, response_1.errorResponse)('Failed to get song list');
             }
         },
         async getDetail(req) {
@@ -40,15 +43,15 @@ export function createSongListHandlers() {
                 const source_id = query.source_id || 'kw';
                 const id = query.id;
                 if (!id)
-                    return badRequestResponse('ID is required');
+                    return (0, response_1.badRequestResponse)('ID is required');
                 const module = platformModules[source_id];
                 if (!module)
-                    return badRequestResponse('Unknown source');
+                    return (0, response_1.badRequestResponse)('Unknown source');
                 const result = await module.songList.detail(id);
-                return successResponse(result);
+                return (0, response_1.successResponse)(result);
             }
             catch (e) {
-                return errorResponse('Failed to get song list detail');
+                return (0, response_1.errorResponse)('Failed to get song list detail');
             }
         },
         async search(req) {
@@ -59,15 +62,15 @@ export function createSongListHandlers() {
                 const page = Number(query.page) || 1;
                 const limit = Number(query.limit) || 20;
                 if (!keyword)
-                    return badRequestResponse('Keyword is required');
+                    return (0, response_1.badRequestResponse)('Keyword is required');
                 const module = platformModules[source_id];
                 if (!module)
-                    return badRequestResponse('Unknown source');
+                    return (0, response_1.badRequestResponse)('Unknown source');
                 const result = await module.songList.search(keyword, page, limit);
-                return successResponse(result);
+                return (0, response_1.successResponse)(result);
             }
             catch (e) {
-                return errorResponse('Failed to search song list');
+                return (0, response_1.errorResponse)('Failed to search song list');
             }
         },
         async getSorts(req) {
@@ -76,12 +79,12 @@ export function createSongListHandlers() {
                 const source_id = query.source_id || 'kw';
                 const module = platformModules[source_id];
                 if (!module)
-                    return badRequestResponse('Unknown source');
+                    return (0, response_1.badRequestResponse)('Unknown source');
                 const result = await module.songList.sorts();
-                return successResponse(result);
+                return (0, response_1.successResponse)(result);
             }
             catch (e) {
-                return errorResponse('Failed to get sorts');
+                return (0, response_1.errorResponse)('Failed to get sorts');
             }
         },
     };

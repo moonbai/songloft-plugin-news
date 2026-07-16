@@ -1,10 +1,7 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.createNewsHandlers = createNewsHandlers;
 // 新闻列表/详情处理
-const facade_1 = require("../newsSdk/facade");
-const response_1 = require("./response");
-function createNewsHandlers(runtimeManager) {
+import { platformModules } from '../newsSdk/facade';
+import { successResponse, errorResponse, badRequestResponse } from './response';
+export function createNewsHandlers(runtimeManager) {
     return {
         /**
          * 获取分类列表
@@ -13,14 +10,14 @@ function createNewsHandlers(runtimeManager) {
             try {
                 const request = req;
                 const source_id = String(request.query?.source_id || 'toutiao');
-                const module = facade_1.platformModules[source_id];
+                const module = platformModules[source_id];
                 if (!module)
-                    return (0, response_1.badRequestResponse)('Unknown source');
+                    return badRequestResponse('Unknown source');
                 const categories = await module.newsList.categories();
-                return (0, response_1.successResponse)({ categories });
+                return successResponse({ categories });
             }
             catch (e) {
-                return (0, response_1.errorResponse)('Failed to get categories: ' + e.message);
+                return errorResponse('Failed to get categories: ' + e.message);
             }
         },
         /**
@@ -34,10 +31,10 @@ function createNewsHandlers(runtimeManager) {
                 const page = Number(request.query?.page) || 1;
                 const limit = Number(request.query?.limit) || 20;
                 const result = await runtimeManager.fetchNewsList(source_id, category, page, limit);
-                return (0, response_1.successResponse)(result);
+                return successResponse(result);
             }
             catch (e) {
-                return (0, response_1.errorResponse)('Failed to get list: ' + e.message);
+                return errorResponse('Failed to get list: ' + e.message);
             }
         },
         /**
@@ -49,14 +46,14 @@ function createNewsHandlers(runtimeManager) {
                 const source_id = String(request.query?.source_id || 'toutiao');
                 const id = String(request.query?.id || '');
                 if (!id)
-                    return (0, response_1.badRequestResponse)('id is required');
+                    return badRequestResponse('id is required');
                 const result = await runtimeManager.fetchNewsDetail(source_id, id);
                 if (!result)
-                    return (0, response_1.errorResponse)('News not found', 404);
-                return (0, response_1.successResponse)(result);
+                    return errorResponse('News not found', 404);
+                return successResponse(result);
             }
             catch (e) {
-                return (0, response_1.errorResponse)('Failed to get detail: ' + e.message);
+                return errorResponse('Failed to get detail: ' + e.message);
             }
         },
         /**
@@ -69,14 +66,14 @@ function createNewsHandlers(runtimeManager) {
                 const board_id = String(request.query?.board_id || 'hot');
                 const page = Number(request.query?.page) || 1;
                 const limit = Number(request.query?.limit) || 30;
-                const module = facade_1.platformModules[source_id];
+                const module = platformModules[source_id];
                 if (!module)
-                    return (0, response_1.badRequestResponse)('Unknown source');
+                    return badRequestResponse('Unknown source');
                 const result = await module.hotboard.list(board_id, page, limit);
-                return (0, response_1.successResponse)(result);
+                return successResponse(result);
             }
             catch (e) {
-                return (0, response_1.errorResponse)('Failed to get hotboard: ' + e.message);
+                return errorResponse('Failed to get hotboard: ' + e.message);
             }
         },
         /**
@@ -86,14 +83,14 @@ function createNewsHandlers(runtimeManager) {
             try {
                 const request = req;
                 const source_id = String(request.query?.source_id || 'toutiao');
-                const module = facade_1.platformModules[source_id];
+                const module = platformModules[source_id];
                 if (!module)
-                    return (0, response_1.badRequestResponse)('Unknown source');
+                    return badRequestResponse('Unknown source');
                 const boards = await module.hotboard.boards();
-                return (0, response_1.successResponse)({ boards });
+                return successResponse({ boards });
             }
             catch (e) {
-                return (0, response_1.errorResponse)('Failed to get boards: ' + e.message);
+                return errorResponse('Failed to get boards: ' + e.message);
             }
         },
     };

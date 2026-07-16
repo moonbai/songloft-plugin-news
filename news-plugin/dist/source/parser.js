@@ -1,8 +1,3 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.parseScriptMetadata = parseScriptMetadata;
-exports.parseJsSource = parseJsSource;
-exports.parseZipSource = parseZipSource;
 /**
  * 解析 JSDoc 风格元数据
  * 格式：
@@ -15,7 +10,7 @@ exports.parseZipSource = parseZipSource;
  *  * @platforms platform1,platform2
  *\/
  */
-function parseScriptMetadata(script) {
+export function parseScriptMetadata(script) {
     const meta = {
         id: '',
         name: '',
@@ -44,7 +39,7 @@ function parseScriptMetadata(script) {
 /**
  * 解析 JS 源文件
  */
-function parseJsSource(name, content) {
+export function parseJsSource(name, content) {
     const meta = parseScriptMetadata(content);
     const id = meta.id || `src_${name}_${Date.now()}`;
     const now = Date.now();
@@ -64,7 +59,7 @@ function parseJsSource(name, content) {
 /**
  * 解析 ZIP 源文件 - ZIP 包含多个 .js 文件，每个文件一个源
  */
-function parseZipSource(zipName, zipData) {
+export function parseZipSource(zipName, zipData) {
     const sources = [];
     // ZIP 文件解析 - 简化的 ZIP 解析
     // 这里我们只做基础解析，更复杂的 ZIP 解析可能需要外部库

@@ -1,4 +1,11 @@
-export function createRouter() {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.createRouter = createRouter;
+exports.createSearchHandler = createSearchHandler;
+exports.createMusicUrlHandler = createMusicUrlHandler;
+exports.jsonResponse = jsonResponse;
+exports.parseQuery = parseQuery;
+function createRouter() {
     const routes = [];
     return {
         get(path, handler) {
@@ -23,7 +30,7 @@ export function createRouter() {
         },
     };
 }
-export function createSearchHandler(options) {
+function createSearchHandler(options) {
     return async (req) => {
         try {
             const body = req.body ? Array.from(req.body).map(b => String.fromCharCode(b)).join('') : '{}';
@@ -36,7 +43,7 @@ export function createSearchHandler(options) {
         }
     };
 }
-export function createMusicUrlHandler(options) {
+function createMusicUrlHandler(options) {
     return async (req) => {
         try {
             const body = req.body ? Array.from(req.body).map(b => String.fromCharCode(b)).join('') : '{}';
@@ -58,7 +65,7 @@ export function createMusicUrlHandler(options) {
         }
     };
 }
-export function jsonResponse(body, status = 200) {
+function jsonResponse(body, status = 200) {
     const json = typeof body === 'string' ? body : JSON.stringify(body);
     return {
         statusCode: status,
@@ -66,7 +73,7 @@ export function jsonResponse(body, status = 200) {
         body: new Uint8Array(json.split('').map(c => c.charCodeAt(0))),
     };
 }
-export function parseQuery(q) {
+function parseQuery(q) {
     const result = {};
     const pairs = q.split('&');
     for (const pair of pairs) {

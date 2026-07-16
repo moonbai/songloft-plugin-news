@@ -1,10 +1,7 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.RuntimeManager = void 0;
 // 运行时管理器 - 管理多个 source 脚本的运行时
-const runtime_1 = require("./runtime");
-const newsSdk_1 = require("../newsSdk");
-class RuntimeManager {
+import { SourceRuntime } from './runtime';
+import { platformModules } from '../newsSdk';
+export class RuntimeManager {
     constructor() {
         this.runtimes = new Map();
         this.initPromises = new Map();
@@ -20,7 +17,7 @@ class RuntimeManager {
                 old.destroy();
             this.runtimes.delete(name);
         }
-        const runtime = new runtime_1.SourceRuntime({ name, script });
+        const runtime = new SourceRuntime({ name, script });
         this.runtimes.set(name, runtime);
         const initPromise = runtime.init();
         this.initPromises.set(name, initPromise);
@@ -63,8 +60,8 @@ class RuntimeManager {
      */
     async fetchNewsList(source, category, page, limit) {
         // 先尝试内置平台
-        if (newsSdk_1.platformModules[source]) {
-            const result = await newsSdk_1.platformModules[source].newsList.list(category, page, limit);
+        if (platformModules[source]) {
+            const result = await platformModules[source].newsList.list(category, page, limit);
             return { news: result.news, total: result.news.length };
         }
         // 尝试自定义脚本
@@ -88,8 +85,8 @@ class RuntimeManager {
      */
     async fetchNewsDetail(source, id) {
         // 先尝试内置平台
-        if (newsSdk_1.platformModules[source]) {
-            return await newsSdk_1.platformModules[source].newsDetail.detail(id);
+        if (platformModules[source]) {
+            return await platformModules[source].newsDetail.detail(id);
         }
         // 尝试自定义脚本
         for (const [name, runtime] of this.runtimes) {
@@ -112,8 +109,8 @@ class RuntimeManager {
      */
     async fetchNewsSearch(source, keyword, page, limit) {
         // 先尝试内置平台
-        if (newsSdk_1.platformModules[source]) {
-            const result = await newsSdk_1.platformModules[source].newsSearch.search(keyword, page, limit);
+        if (platformModules[source]) {
+            const result = await platformModules[source].newsSearch.search(keyword, page, limit);
             return { news: result.news, total: result.total };
         }
         // 尝试自定义脚本
@@ -160,4 +157,3 @@ class RuntimeManager {
         this.initPromises.clear();
     }
 }
-exports.RuntimeManager = RuntimeManager;

@@ -1,14 +1,5 @@
-"use strict";
 // 本地类型定义，替代 @songloft/plugin-sdk
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.createRouter = createRouter;
-exports.jsonResponse = jsonResponse;
-exports.errorResponse = errorResponse;
-exports.successResponse = successResponse;
-exports.badRequestResponse = badRequestResponse;
-exports.createSearchHandler = createSearchHandler;
-exports.createNewsDetailHandler = createNewsDetailHandler;
-function createRouter() {
+export function createRouter() {
     const routes = [];
     const compilePath = (path) => {
         const paramNames = [];
@@ -87,23 +78,23 @@ function createRouter() {
         },
     };
 }
-function jsonResponse(data, status = 200) {
+export function jsonResponse(data, status = 200) {
     return {
         status,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
     };
 }
-function errorResponse(msg, status = 500) {
+export function errorResponse(msg, status = 500) {
     return jsonResponse({ code: status, msg }, status);
 }
-function successResponse(data) {
+export function successResponse(data) {
     return jsonResponse({ code: 0, msg: 'success', data });
 }
-function badRequestResponse(msg) {
+export function badRequestResponse(msg) {
     return errorResponse(msg, 400);
 }
-function createSearchHandler(opts) {
+export function createSearchHandler(opts) {
     return async (req) => {
         try {
             const body = req.body;
@@ -132,7 +123,7 @@ function createSearchHandler(opts) {
         }
     };
 }
-function createNewsDetailHandler(opts) {
+export function createNewsDetailHandler(opts) {
     return async (req) => {
         try {
             const source = String(req.query.source_id || req.query.source || '');

@@ -1,18 +1,7 @@
-"use strict";
 // 播放列表存储
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.getDefaultTtsConfig = getDefaultTtsConfig;
-exports.getTtsConfig = getTtsConfig;
-exports.setTtsConfig = setTtsConfig;
-exports.getPlaylists = getPlaylists;
-exports.setPlaylists = setPlaylists;
-exports.getDefaultPlaylist = getDefaultPlaylist;
-exports.addToPlaylist = addToPlaylist;
-exports.removeFromPlaylist = removeFromPlaylist;
-exports.clearPlaylist = clearPlaylist;
 const PLAYLIST_KEY = 'news_playlists';
 const TTS_CONFIG_KEY = 'news_tts_config';
-function getDefaultTtsConfig() {
+export function getDefaultTtsConfig() {
     return {
         voice: 'zh-CN',
         rate: 1.0,
@@ -22,7 +11,7 @@ function getDefaultTtsConfig() {
         enableTts: true,
     };
 }
-function getTtsConfig() {
+export function getTtsConfig() {
     try {
         const raw = songloft.storage.get(TTS_CONFIG_KEY);
         if (!raw)
@@ -33,7 +22,7 @@ function getTtsConfig() {
         return getDefaultTtsConfig();
     }
 }
-function setTtsConfig(config) {
+export function setTtsConfig(config) {
     try {
         songloft.storage.set(TTS_CONFIG_KEY, JSON.stringify(config));
     }
@@ -41,7 +30,7 @@ function setTtsConfig(config) {
         songloft.log.error('Failed to save TTS config:', e);
     }
 }
-function getPlaylists() {
+export function getPlaylists() {
     try {
         const raw = songloft.storage.get(PLAYLIST_KEY);
         if (!raw)
@@ -52,7 +41,7 @@ function getPlaylists() {
         return [];
     }
 }
-function setPlaylists(playlists) {
+export function setPlaylists(playlists) {
     try {
         songloft.storage.set(PLAYLIST_KEY, JSON.stringify(playlists));
     }
@@ -60,7 +49,7 @@ function setPlaylists(playlists) {
         songloft.log.error('Failed to save playlists:', e);
     }
 }
-function getDefaultPlaylist() {
+export function getDefaultPlaylist() {
     const all = getPlaylists();
     const existing = all.find(p => p.name === 'default');
     if (existing)
@@ -70,7 +59,7 @@ function getDefaultPlaylist() {
     setPlaylists(all);
     return newList;
 }
-function addToPlaylist(item, listName = 'default') {
+export function addToPlaylist(item, listName = 'default') {
     const all = getPlaylists();
     let list = all.find(p => p.name === listName);
     if (!list) {
@@ -84,7 +73,7 @@ function addToPlaylist(item, listName = 'default') {
     setPlaylists(all);
     return true;
 }
-function removeFromPlaylist(id, source, listName = 'default') {
+export function removeFromPlaylist(id, source, listName = 'default') {
     const all = getPlaylists();
     const list = all.find(p => p.name === listName);
     if (!list)
@@ -96,7 +85,7 @@ function removeFromPlaylist(id, source, listName = 'default') {
     setPlaylists(all);
     return true;
 }
-function clearPlaylist(listName = 'default') {
+export function clearPlaylist(listName = 'default') {
     const all = getPlaylists();
     const list = all.find(p => p.name === listName);
     if (!list)

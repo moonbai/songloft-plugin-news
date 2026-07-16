@@ -1,3 +1,5 @@
+// 公共类型定义
+
 export interface SongInfo {
   name: string;
   singer: string;
@@ -7,19 +9,11 @@ export interface SongInfo {
   songmid?: string;
   hash?: string;
   copyrightId?: string;
-  strMediaMid?: string;
+  albumId?: string;
   albumMid?: string;
+  strMediaMid?: string;
+  cover?: string;
   platform: string;
-  [key: string]: unknown;
-}
-
-export interface SearchResultItem {
-  title: string;
-  artist: string;
-  album: string;
-  duration: number;
-  cover_url: string;
-  source_data: SourceData;
 }
 
 export interface SourceData {
@@ -28,66 +22,40 @@ export interface SourceData {
   songInfo: SongInfo;
 }
 
-export interface LyricData {
-  lyric: string;
-  tlyric?: string;
-}
-
-export interface SourceMeta {
+export interface CustomSource {
   id: string;
   name: string;
-  version: string;
-  description?: string;
+  version?: string;
   author?: string;
-  homepage?: string;
+  description?: string;
+  script: string;
   enabled: boolean;
-  loading: boolean;
-  platforms: string[];
-  rawScript: string;
-  successCalls: number;
-  totalCalls: number;
+  createTime: number;
+  updateTime: number;
 }
 
-export interface LxSource {
-  name: string;
-  type: string;
-  actions: string[];
-  qualitys: string[];
-}
-
-export interface HttpFetchResult {
-  statusCode: number;
-  headers: Record<string, string>;
-  body: unknown;
+export interface LyricData {
+  lyric: string;
 }
 
 export interface HttpFetchOptions {
   method?: string;
   headers?: Record<string, string>;
-  body?: unknown;
+  body?: string | Uint8Array | Record<string, unknown>;
   form?: Record<string, string>;
-  formData?: Record<string, string | Blob>;
   timeout?: number;
-  url?: string;
 }
 
-export interface MusicUrlResult {
-  url: string;
-  headers?: Record<string, string>;
+export interface HttpFetchResult {
+  statusCode: number;
+  statusMessage?: string;
+  headers: Record<string, string>;
+  body: any;
 }
 
-export interface PlaylistItem {
-  id: string;
+export interface LxSource {
   name: string;
-  cover?: string;
-  description?: string;
-  playCount?: number;
-  trackCount?: number;
-}
-
-export interface LeaderboardItem {
-  id: string;
-  name: string;
-  cover?: string;
-  description?: string;
+  type?: string;
+  actions?: string[];
+  qualitys?: string[];
 }

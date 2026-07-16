@@ -1,97 +1,94 @@
-import { successResponse, errorResponse, badRequestResponse } from './response';
-export function createSourceHandlers(sourceManager) {
+"use strict";
+// 音源管理处理器
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.createSourceHandlers = createSourceHandlers;
+const response_1 = require("./response");
+function createSourceHandlers(sourceManager) {
     return {
         async getSources(req) {
             try {
-                const sources = sourceManager.getAll();
-                const batchStatus = sourceManager.getBatchStatus();
-                return successResponse({
-                    sources,
-                    batch_status: batchStatus,
-                });
+                const sources = sourceManager.list();
+                return (0, response_1.successResponse)({ sources });
             }
             catch (e) {
-                return errorResponse('Failed to get sources');
+                return (0, response_1.errorResponse)('Failed to get sources');
             }
         },
         async importSource(req) {
             try {
-                const body = req.body;
+                const r = req;
+                const body = r.body;
                 if (!body)
-                    return badRequestResponse('No body provided');
-                const content = Array.from(body).map(b => String.fromCharCode(b)).join('');
-                const files = content.match(/Content-Disposition: form-data; name="files"; filename="(.+?)"/);
-                if (files) {
-                    const filename = files[1];
-                    if (filename.endsWith('.zip')) {
-                        const result = await sourceManager.importZip(content);
-                        return successResponse(result);
-                    }
-                    else if (filename.endsWith('.js')) {
-                        const result = await sourceManager.importScript(content, filename);
-                        return successResponse([result]);
-                    }
-                }
-                return badRequestResponse('Unsupported file type');
+                    return (0, response_1.errorResponse)('No body', 400);
+                const text = new TextDecoder().decode(body);
+                const parsed = JSON.parse(text);
+                const name = String(parsed.name || 'imported');
+                const content = String(parsed.content || '');
+                if (!content)
+                    return (0, response_1.errorResponse)('content required', 400);
+                const source = sourceManager.importJs(name, content);
+                return (0, response_1.successResponse)({ source });
             }
             catch (e) {
-                return errorResponse('Failed to import source');
+                return (0, response_1.errorResponse)('Import failed: ' + e.message);
             }
         },
         async importSourceUrl(req) {
             try {
-                const body = req.body;
+                const r = req;
+                const body = r.body;
                 if (!body)
-                    return badRequestResponse('No body provided');
-                const content = Array.from(body).map(b => String.fromCharCode(b)).join('');
-                const parsed = JSON.parse(content);
-                const url = parsed.url;
+                    return (0, response_1.errorResponse)('No body', 400);
+                const text = new TextDecoder().decode(body);
+                const parsed = JSON.parse(text);
+                const url = String(parsed.url);
                 if (!url)
-                    return badRequestResponse('URL is required');
-                const result = await sourceManager.importUrl(url);
-                return successResponse(result);
+                    return (0, response_1.errorResponse)('url required', 400);
+                const result = await sourceManager.importFromUrl(url);
+                return (0, response_1.successResponse)({ sources: Array.isArray(result) ? result : [result] });
             }
             catch (e) {
-                return errorResponse('Failed to import source from URL');
+                return (0, response_1.errorResponse)('Import from URL failed: ' + e.message);
             }
         },
         async deleteSource(req) {
             try {
-                const query = req.query;
+                const r = req;
+                const query = r.query;
                 const id = query.id;
                 if (!id)
-                    return badRequestResponse('ID is required');
-                await sourceManager.remove(id);
-                return successResponse(null, 'Deleted');
+                    return (0, response_1.errorResponse)('id required', 400);
+                const success = sourceManager.delete(id);
+                return (0, response_1.successResponse)({ success });
             }
             catch (e) {
-                return errorResponse('Failed to delete source');
+                return (0, response_1.errorResponse)('Delete failed');
             }
         },
         async toggleSource(req) {
             try {
-                const body = req.body;
+                const r = req;
+                const body = r.body;
                 if (!body)
-                    return badRequestResponse('No body provided');
-                const content = Array.from(body).map(b => String.fromCharCode(b)).join('');
-                const parsed = JSON.parse(content);
-                const id = parsed.id;
-                if (!id)
-                    return badRequestResponse('ID is required');
-                const enabled = await sourceManager.toggle(id);
-                return successResponse({ enabled });
+                    return (0, response_1.errorResponse)('No body', 400);
+                const text = new TextDecoder().decode(body);
+                const parsed = JSON.parse(text);
+                const id = String(parsed.id);
+                const enabled = Boolean(parsed.enabled);
+                const success = sourceManager.setEnabled(id, enabled);
+                return (0, response_1.successResponse)({ success });
             }
             catch (e) {
-                return errorResponse('Failed to toggle source');
+                return (0, response_1.errorResponse)('Toggle failed');
             }
         },
         async reloadSources(req) {
             try {
-                await sourceManager.reloadAll();
-                return successResponse(null, 'Reloading');
+                await sourceManager.reloadAll(sourceManager);
+                return (0, response_1.successResponse)({ success: true });
             }
             catch (e) {
-                return errorResponse('Failed to reload sources');
+                return (0, response_1.errorResponse)('Reload failed');
             }
         },
     };

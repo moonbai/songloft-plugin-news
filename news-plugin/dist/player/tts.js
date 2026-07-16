@@ -1,11 +1,7 @@
-"use strict";
 // TTS 服务 - 浏览器端 TTS 调用服务
 // 由于后端无法直接调用 TTS，前端通过 Web Speech API 实现
 // 后端只负责内容准备和 TTS 配置
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.buildTtsScript = buildTtsScript;
-exports.estimateSpeechDuration = estimateSpeechDuration;
-function buildTtsScript(news, content) {
+export function buildTtsScript(news, content) {
     const segments = [];
     segments.push({
         id: 'title',
@@ -72,7 +68,7 @@ function buildTtsScript(news, content) {
     }
     return segments;
 }
-function estimateSpeechDuration(text, rate = 1.0) {
+export function estimateSpeechDuration(text, rate = 1.0) {
     // 中文按每分钟 240 字计算
     const charCount = text.length;
     const wordsPerMin = 240 * rate;

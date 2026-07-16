@@ -1,9 +1,4 @@
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-const request_1 = __importDefault(require("../request"));
+import httpFetch from '../request';
 function normalizeItem(item) {
     return {
         id: String(item.id || item.wordId || item.card_id || ''),
@@ -21,7 +16,7 @@ function normalizeItem(item) {
 const newsList = {
     async list(category, page, limit) {
         const url = `https://top.baidu.com/board?tab=${encodeURIComponent(category || 'realtime')}`;
-        const resp = await (0, request_1.default)(url, {
+        const resp = await httpFetch(url, {
             headers: { 'User-Agent': 'Mozilla/5.0' },
         });
         const raw = String(resp.body || '');
@@ -74,7 +69,7 @@ const newsDetail = {
 const newsSearch = {
     async search(keyword, page, limit) {
         const url = `https://www.baidu.com/s?wd=${encodeURIComponent(keyword)}&rn=${limit}&pn=${(page - 1) * limit}`;
-        const resp = await (0, request_1.default)(url, {
+        const resp = await httpFetch(url, {
             headers: { 'User-Agent': 'Mozilla/5.0' },
         });
         const raw = String(resp.body || '');
@@ -112,4 +107,4 @@ const baidu = {
     newsSearch,
     hotboard,
 };
-exports.default = baidu;
+export default baidu;

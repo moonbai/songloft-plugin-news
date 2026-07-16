@@ -1,28 +1,26 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-const plugin_sdk_1 = require("@songloft/plugin-sdk");
-const engine_1 = require("./engine");
-const source_1 = require("./source");
-const facade_1 = require("./newsSdk/facade");
-const handlers_1 = require("./handlers");
+import { createRouter, jsonResponse } from './@songloft/plugin-sdk';
+import { RuntimeManager } from './engine';
+import { SourceManager } from './source';
+import { sources } from './newsSdk/facade';
+import { createSearchHandlers, createNewsHandlers, createSourceHandlers, createPlayerHandlers } from './handlers';
 let router;
 let runtimeManager;
 let sourceManager;
 function initRouter() {
-    router = (0, plugin_sdk_1.createRouter)();
+    router = createRouter();
     // 搜索
-    const searchHandlers = (0, handlers_1.createSearchHandlers)();
+    const searchHandlers = createSearchHandlers();
     router.post('/api/search', searchHandlers.search);
     router.get('/api/sources', searchHandlers.getSources);
     // 新闻列表/详情/热榜
-    const newsHandlers = (0, handlers_1.createNewsHandlers)(runtimeManager);
+    const newsHandlers = createNewsHandlers(runtimeManager);
     router.get('/api/news/categories', newsHandlers.getCategories);
     router.get('/api/news/list', newsHandlers.getList);
     router.get('/api/news/detail', newsHandlers.getDetail);
     router.get('/api/news/hotboard', newsHandlers.getHotboard);
     router.get('/api/news/boards', newsHandlers.getBoards);
     // source 管理
-    const sourceHandlers = (0, handlers_1.createSourceHandlers)(sourceManager);
+    const sourceHandlers = createSourceHandlers(sourceManager);
     router.get('/api/custom-sources', sourceHandlers.getSources);
     router.post('/api/custom-sources/import', sourceHandlers.importSource);
     router.post('/api/custom-sources/import-url', sourceHandlers.importSourceUrl);
@@ -31,7 +29,7 @@ function initRouter() {
     router.post('/api/custom-sources/reload', sourceHandlers.reloadSources);
     router.get('/api/custom-sources/export', sourceHandlers.exportSources);
     // 播放器
-    const playerHandlers = (0, handlers_1.createPlayerHandlers)();
+    const playerHandlers = createPlayerHandlers();
     router.post('/api/player/resolve', playerHandlers.resolve);
     router.post('/api/player/playlist/add', playerHandlers.addToPlaylist);
     router.delete('/api/player/playlist/remove', playerHandlers.removeFromPlaylist);
@@ -56,22 +54,22 @@ function initRouter() {
                 }
             });
             const results = await Promise.all(promises);
-            return (0, plugin_sdk_1.jsonResponse)({ code: 0, msg: 'success', data: results });
+            return jsonResponse({ code: 0, msg: 'success', data: results });
         }
         catch (e) {
-            return (0, plugin_sdk_1.jsonResponse)({ code: 500, msg: 'Failed: ' + e.message }, 500);
+            return jsonResponse({ code: 500, msg: 'Failed: ' + e.message }, 500);
         }
     });
     router.get('/api/health', () => {
-        return (0, plugin_sdk_1.jsonResponse)({ code: 0, msg: 'OK', data: { sources: facade_1.sources.length, customSources: sourceManager.list().length } });
+        return jsonResponse({ code: 0, msg: 'OK', data: { sources: sources.length, customSources: sourceManager.list().length } });
     });
 }
 ;
 globalThis.onInit = async function () {
     try {
         songloft.log.info('Initializing news plugin');
-        runtimeManager = new engine_1.RuntimeManager();
-        sourceManager = new source_1.SourceManager(runtimeManager);
+        runtimeManager = new RuntimeManager();
+        sourceManager = new SourceManager(runtimeManager);
         await sourceManager.init();
         initRouter();
         setTimeout(() => {
@@ -109,10 +107,10 @@ globalThis.onHTTPRequest = function (req) {
         if (result) {
             return result;
         }
-        return (0, plugin_sdk_1.jsonResponse)({ code: 404, msg: 'Not Found' }, 404);
+        return jsonResponse({ code: 404, msg: 'Not Found' }, 404);
     }
     catch (error) {
         songloft.log.error('HTTP request error:', error);
-        return (0, plugin_sdk_1.jsonResponse)({ code: 500, msg: 'Internal Server Error' }, 500);
+        return jsonResponse({ code: 500, msg: 'Internal Server Error' }, 500);
     }
 };

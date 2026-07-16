@@ -1,7 +1,5 @@
-"use strict";
 // LX News 沙箱预置代码 - 在 QuickJS VM 中运行
 // 暴露给用户脚本的 API：lx (全局对象)
-Object.defineProperty(exports, "__esModule", { value: true });
 const lxNewsPrelude = `
 var lx = (function() {
   var __channels = {};
@@ -82,4 +80,4 @@ var lx = (function() {
   };
 })();
 `;
-exports.default = lxNewsPrelude;
+export default lxNewsPrelude;

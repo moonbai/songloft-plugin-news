@@ -5,8 +5,8 @@
   "main": "main.js",
   "minHostVersion": "1.0.0",
   "permissions": ["storage", "http_request", "jsenv"],
-  "entryHash": "d66d730973422525136faa5c862ec50e",
-  "zipHash": "eff27b6d16a69689deed03bc0f134d28",
+  "entryHash": "837ec2eaba42535ad3667238fa9a1b2c",
+  "zipHash": "588458e7d2c1699a84793910c00a0c42",
   "description": "新闻资讯聚合 - 多平台新闻与音频播放",
   "author": "moonbai"
 }

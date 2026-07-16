@@ -1,9 +1,4 @@
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-const request_1 = __importDefault(require("../request"));
+import httpFetch from '../request';
 function normalizeItem(item) {
     return {
         id: String(item.id || item.target?.id || ''),
@@ -31,7 +26,7 @@ const newsList = {
 const newsDetail = {
     async detail(id) {
         const url = `https://www.zhihu.com/question/${id}`;
-        const resp = await (0, request_1.default)(url, {
+        const resp = await httpFetch(url, {
             headers: { 'User-Agent': 'Mozilla/5.0' },
         });
         return {
@@ -49,7 +44,7 @@ const newsDetail = {
 const newsSearch = {
     async search(keyword, page, limit) {
         const url = `https://www.zhihu.com/api/v4/search_v3?t=general&q=${encodeURIComponent(keyword)}&offset=${(page - 1) * limit}&limit=${limit}`;
-        const resp = await (0, request_1.default)(url, {
+        const resp = await httpFetch(url, {
             headers: { 'User-Agent': 'Mozilla/5.0' },
         });
         const data = resp.body;
@@ -68,7 +63,7 @@ const hotboard = {
     },
     async list(id, page, limit) {
         const url = `https://www.zhihu.com/api/v3/feed/topstory/hot-lists/total?limit=${limit}`;
-        const resp = await (0, request_1.default)(url, {
+        const resp = await httpFetch(url, {
             headers: { 'User-Agent': 'Mozilla/5.0' },
         });
         const data = resp.body;
@@ -84,4 +79,4 @@ const zhihu = {
     newsSearch,
     hotboard,
 };
-exports.default = zhihu;
+export default zhihu;

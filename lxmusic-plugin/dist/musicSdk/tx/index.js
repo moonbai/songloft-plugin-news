@@ -1,4 +1,9 @@
-import httpFetch from '../request';
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const request_1 = __importDefault(require("../request"));
 function normalizeSong(song) {
     return {
         name: String(song.name || song.songName || ''),
@@ -14,7 +19,7 @@ function normalizeSong(song) {
 const musicSearch = {
     async search(keyword, page, limit) {
         const url = `https://c.y.qq.com/soso/fcgi-bin/client_search_cp?w=${encodeURIComponent(keyword)}&p=${page}&n=${limit}&format=json`;
-        const { body } = await httpFetch(url).promise;
+        const { body } = await (0, request_1.default)(url).promise;
         const data = body;
         const songs = (data.data?.song || []).map(normalizeSong);
         return { songs, total: Number(data.data?.totalnum || songs.length) };
@@ -25,7 +30,7 @@ async function getLyric(songInfo) {
     if (!songmid)
         return null;
     const url = `https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg?songmid=${songmid}&format=json`;
-    const { body } = await httpFetch(url).promise;
+    const { body } = await (0, request_1.default)(url).promise;
     const data = body;
     if (data && typeof data === 'object') {
         return {
@@ -43,7 +48,7 @@ const songList = {
     },
     async detail(id) {
         const url = `https://c.y.qq.com/qzone/fcg-bin/fcg_ucc_getcdinfo_byids_cp.fcg?type=1&json=1&utf8=1&onlysong=0&disstid=${id}`;
-        const { body } = await httpFetch(url).promise;
+        const { body } = await (0, request_1.default)(url).promise;
         const data = body;
         const songs = ((data.cdlist || [])[0]?.songlist || []).map(normalizeSong);
         return { songs };
@@ -69,4 +74,4 @@ const tx = {
     songList,
     leaderboard,
 };
-export default tx;
+exports.default = tx;

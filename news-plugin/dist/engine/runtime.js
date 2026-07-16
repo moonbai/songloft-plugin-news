@@ -1,13 +1,6 @@
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.SourceRuntime = void 0;
-exports.parseScriptMetadata = parseScriptMetadata;
 // 单个 source 脚本的运行时
-const lx_prelude_1 = __importDefault(require("./lx_prelude"));
-class SourceRuntime {
+import prelude from './lx_prelude';
+export class SourceRuntime {
     constructor(options) {
         this.inited = false;
         this.sources = [];
@@ -19,7 +12,7 @@ class SourceRuntime {
         try {
             songloft.jsenv.create(this.envName);
             // 注入 prelude（lx 全局对象）
-            songloft.jsenv.executeWait(this.envName, lx_prelude_1.default, 5000, []);
+            songloft.jsenv.executeWait(this.envName, prelude, 5000, []);
             // 注入 channel 函数
             songloft.jsenv.injectFunction(this.envName, 'lx_event', (...args) => {
                 this.handleEvent(args[0]);
@@ -129,11 +122,10 @@ class SourceRuntime {
         return script + '\n;lx.notifyInited();';
     }
 }
-exports.SourceRuntime = SourceRuntime;
 /**
  * 解析 JSDoc 风格元数据
  */
-function parseScriptMetadata(script) {
+export function parseScriptMetadata(script) {
     const sources = [];
     const regex = /\/\*\*\s*\*\s*@name\s+([^\n]+)\s*\*\s*@version\s+([^\n]+)\s*\*\s*@author\s+([^\n]+)\s*\*\s*@description\s+([^\n]+)\s*\*\s*@id\s+([^\n]+)\s*\*\s*@platforms\s+([^\n]+)\s*\*\//g;
     let match;

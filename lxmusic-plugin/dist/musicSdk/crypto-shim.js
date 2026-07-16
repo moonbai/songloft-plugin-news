@@ -1,92 +1,102 @@
-import CryptoJS from 'crypto-js';
-export function md5(data) {
-    if (data instanceof Uint8Array) {
-        const hex = Array.from(data).map(b => b.toString(16).padStart(2, '0')).join('');
-        return CryptoJS.MD5(CryptoJS.enc.Hex.parse(hex)).toString();
-    }
-    return CryptoJS.MD5(data).toString();
-}
-export function sha1(data) {
-    if (data instanceof Uint8Array) {
-        const hex = Array.from(data).map(b => b.toString(16).padStart(2, '0')).join('');
-        return CryptoJS.SHA1(CryptoJS.enc.Hex.parse(hex)).toString();
-    }
-    return CryptoJS.SHA1(data).toString();
-}
-export function sha256(data) {
-    if (data instanceof Uint8Array) {
-        const hex = Array.from(data).map(b => b.toString(16).padStart(2, '0')).join('');
-        return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString();
-    }
-    return CryptoJS.SHA256(data).toString();
-}
-export function hmacSHA1(data, key) {
-    return CryptoJS.HmacSHA1(data, key).toString();
-}
-export function hmacSHA256(data, key) {
-    return CryptoJS.HmacSHA256(data, key).toString();
-}
-export function aesEncrypt(data, key, iv) {
-    const keyBytes = CryptoJS.enc.Utf8.parse(key);
-    const ivBytes = iv ? CryptoJS.enc.Utf8.parse(iv) : undefined;
-    const encrypted = ivBytes
-        ? CryptoJS.AES.encrypt(data, keyBytes, { iv: ivBytes, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 })
-        : CryptoJS.AES.encrypt(data, keyBytes, { mode: CryptoJS.mode.ECB, padding: CryptoJS.pad.Pkcs7 });
-    return encrypted.toString();
-}
-export function aesDecrypt(data, key, iv) {
-    const keyBytes = CryptoJS.enc.Utf8.parse(key);
-    const ivBytes = iv ? CryptoJS.enc.Utf8.parse(iv) : undefined;
-    const decrypted = ivBytes
-        ? CryptoJS.AES.decrypt(data, keyBytes, { iv: ivBytes, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 })
-        : CryptoJS.AES.decrypt(data, keyBytes, { mode: CryptoJS.mode.ECB, padding: CryptoJS.pad.Pkcs7 });
-    return decrypted.toString(CryptoJS.enc.Utf8);
-}
-export function base64Encode(data) {
-    return CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(data));
-}
-export function base64Decode(data) {
-    return CryptoJS.enc.Base64.parse(data).toString(CryptoJS.enc.Utf8);
-}
-export function rsaEncrypt(data, publicKey) {
+"use strict";
+// 加密适配层 - 收敛所有加密调用
+// 宿主提供的 crypto polyfill + CryptoJS
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.md5 = md5;
+exports.aesEncrypt = aesEncrypt;
+exports.aesDecrypt = aesDecrypt;
+exports.rsaEncrypt = rsaEncrypt;
+exports.randomBytes = randomBytes;
+exports.base64Encode = base64Encode;
+exports.base64Decode = base64Decode;
+exports.stringToBytes = stringToBytes;
+exports.bytesToString = bytesToString;
+exports.hmacSha1 = hmacSha1;
+exports.sha256 = sha256;
+exports.hexEncode = hexEncode;
+exports.hexDecode = hexDecode;
+const crypto_js_1 = __importDefault(require("crypto-js"));
+// MD5 哈希
+function md5(data) {
     try {
-        return crypto.rsaEncrypt(data, publicKey);
+        return crypto.md5(data);
     }
     catch {
-        throw new Error('RSA encrypt not supported in this environment');
+        return crypto_js_1.default.MD5(data).toString();
     }
 }
-export function randomBytes(length) {
+// AES 加密 (CBC 模式)
+function aesEncrypt(data, key, iv) {
     try {
-        return crypto.randomBytes(length);
+        return crypto.aesEncrypt(data, key, iv);
     }
     catch {
-        const array = new Uint8Array(length);
-        for (let i = 0; i < length; i++) {
-            array[i] = Math.floor(Math.random() * 256);
-        }
-        return array;
+        const k = crypto_js_1.default.enc.Utf8.parse(key);
+        const i = crypto_js_1.default.enc.Utf8.parse(iv);
+        const encrypted = crypto_js_1.default.AES.encrypt(data, k, {
+            iv: i,
+            mode: crypto_js_1.default.mode.CBC,
+            padding: crypto_js_1.default.pad.Pkcs7,
+        });
+        return encrypted.toString();
     }
 }
-export function stringToBytes(str) {
+// AES 解密
+function aesDecrypt(data, key, iv) {
+    const k = crypto_js_1.default.enc.Utf8.parse(key);
+    const i = crypto_js_1.default.enc.Utf8.parse(iv);
+    const decrypted = crypto_js_1.default.AES.decrypt(data, k, {
+        iv: i,
+        mode: crypto_js_1.default.mode.CBC,
+        padding: crypto_js_1.default.pad.Pkcs7,
+    });
+    return decrypted.toString(crypto_js_1.default.enc.Utf8);
+}
+// RSA 加密
+function rsaEncrypt(data, publicKey) {
+    return crypto.rsaEncrypt(data, publicKey);
+}
+// 随机字节
+function randomBytes(length) {
+    return crypto.randomBytes(length);
+}
+// Base64 编码
+function base64Encode(data) {
+    return crypto_js_1.default.enc.Base64.stringify(crypto_js_1.default.enc.Utf8.parse(data));
+}
+// Base64 解码
+function base64Decode(data) {
+    return crypto_js_1.default.enc.Base64.parse(data).toString(crypto_js_1.default.enc.Utf8);
+}
+// 字符串转字节数组
+function stringToBytes(str) {
     return new Uint8Array(str.split('').map(c => c.charCodeAt(0)));
 }
-export function bytesToString(bytes) {
-    return Array.from(bytes).map(b => String.fromCharCode(b)).join('');
+// 字节数组转字符串
+function bytesToString(bytes) {
+    return String.fromCharCode(...Array.from(bytes));
 }
-export const CryptoShim = {
-    md5,
-    sha1,
-    sha256,
-    hmacSHA1,
-    hmacSHA256,
-    aesEncrypt,
-    aesDecrypt,
-    base64Encode,
-    base64Decode,
-    rsaEncrypt,
-    randomBytes,
-    stringToBytes,
-    bytesToString,
-};
-export default CryptoShim;
+// HMAC-SHA1
+function hmacSha1(data, key) {
+    return crypto_js_1.default.HmacSHA1(data, key).toString();
+}
+// SHA256
+function sha256(data) {
+    return crypto_js_1.default.SHA256(data).toString();
+}
+// Hex 编解码
+function hexEncode(bytes) {
+    return Array.from(bytes)
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+}
+function hexDecode(hex) {
+    const bytes = new Uint8Array(hex.length / 2);
+    for (let i = 0; i < bytes.length; i++) {
+        bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
+    }
+    return bytes;
+}

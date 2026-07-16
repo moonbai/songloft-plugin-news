@@ -1,10 +1,5 @@
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
 // 得到 App 知识新闻/听书
-const request_1 = __importDefault(require("../request"));
+import httpFetch from '../request';
 function normalizeArticle(article) {
     return {
         id: String(article.id || article.aid || ''),
@@ -26,7 +21,7 @@ function normalizeArticle(article) {
 const newsList = {
     async list(category, page, limit) {
         const url = `https://www.dedao.cn/api/v2/columns/${category || 'knowledge'}?page=${page}&size=${limit}`;
-        const resp = await (0, request_1.default)(url, {
+        const resp = await httpFetch(url, {
             headers: { 'User-Agent': 'Mozilla/5.0' },
         });
         const data = resp.body;
@@ -45,7 +40,7 @@ const newsList = {
 const newsDetail = {
     async detail(id) {
         const url = `https://www.dedao.cn/api/v2/article/${id}`;
-        const resp = await (0, request_1.default)(url, {
+        const resp = await httpFetch(url, {
             headers: { 'User-Agent': 'Mozilla/5.0' },
         });
         const data = resp.body;
@@ -59,7 +54,7 @@ const newsDetail = {
 const newsSearch = {
     async search(keyword, page, limit) {
         const url = `https://www.dedao.cn/api/v2/search?keyword=${encodeURIComponent(keyword)}&page=${page}&size=${limit}`;
-        const resp = await (0, request_1.default)(url, {
+        const resp = await httpFetch(url, {
             headers: { 'User-Agent': 'Mozilla/5.0' },
         });
         const data = resp.body;
@@ -83,4 +78,4 @@ const dedao = {
     newsSearch,
     hotboard,
 };
-exports.default = dedao;
+export default dedao;

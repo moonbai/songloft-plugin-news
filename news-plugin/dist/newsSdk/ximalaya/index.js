@@ -1,10 +1,5 @@
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
 // 喜马拉雅 - 音频新闻
-const request_1 = __importDefault(require("../request"));
+import httpFetch from '../request';
 function normalizeTrack(track) {
     return {
         id: String(track.id || track.trackId || ''),
@@ -27,7 +22,7 @@ const newsList = {
     async list(category, page, limit) {
         // 使用喜马拉雅的"资讯"分类 ID: 14
         const url = `https://www.ximalaya.com/revision/getRankTrackList?categoryId=${category || '14'}&rankType=2&pageNum=${page}&pageSize=${limit}`;
-        const resp = await (0, request_1.default)(url, {
+        const resp = await httpFetch(url, {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
                 'Referer': 'https://www.ximalaya.com/',
@@ -51,7 +46,7 @@ const newsList = {
 const newsDetail = {
     async detail(id) {
         const url = `https://www.ximalaya.com/revision/track/simple?trackId=${id}`;
-        const resp = await (0, request_1.default)(url, {
+        const resp = await httpFetch(url, {
             headers: { 'User-Agent': 'Mozilla/5.0' },
         });
         const data = resp.body;
@@ -65,7 +60,7 @@ const newsDetail = {
 const newsSearch = {
     async search(keyword, page, limit) {
         const url = `https://www.ximalaya.com/revision/search?kw=${encodeURIComponent(keyword)}&page=${page}&perPage=${limit}&scope=track`;
-        const resp = await (0, request_1.default)(url, {
+        const resp = await httpFetch(url, {
             headers: { 'User-Agent': 'Mozilla/5.0' },
         });
         const data = resp.body;
@@ -93,4 +88,4 @@ const ximalaya = {
     newsSearch,
     hotboard,
 };
-exports.default = ximalaya;
+export default ximalaya;

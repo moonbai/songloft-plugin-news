@@ -1,4 +1,9 @@
-import httpFetch from '../request';
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const request_1 = __importDefault(require("../request"));
 function normalizeSong(song) {
     return {
         name: String(song.name || song.songName || ''),
@@ -14,7 +19,7 @@ function normalizeSong(song) {
 const musicSearch = {
     async search(keyword, page, limit) {
         const url = `http://searchapi.kugou.com/v3/search/song?keyword=${encodeURIComponent(keyword)}&page=${page}&pagesize=${limit}&format=json`;
-        const { body } = await httpFetch(url).promise;
+        const { body } = await (0, request_1.default)(url).promise;
         const data = body;
         const songs = (data.data?.lists || []).map(normalizeSong);
         return { songs, total: Number(data.data?.total || songs.length) };
@@ -25,7 +30,7 @@ async function getLyric(songInfo) {
     if (!musicId)
         return null;
     const url = `http://lyrics.kugou.com/lyrics?musicid=${musicId}`;
-    const { body } = await httpFetch(url).promise;
+    const { body } = await (0, request_1.default)(url).promise;
     const data = body;
     if (data && typeof data === 'object') {
         return {
@@ -43,7 +48,7 @@ const songList = {
     },
     async detail(id) {
         const url = `http://www.kugou.com/yy/html/special.html?id=${id}`;
-        const { body } = await httpFetch(url).promise;
+        const { body } = await (0, request_1.default)(url).promise;
         return { songs: [] };
     },
     async search(keyword, page, limit) {
@@ -67,4 +72,4 @@ const kg = {
     songList,
     leaderboard,
 };
-export default kg;
+exports.default = kg;

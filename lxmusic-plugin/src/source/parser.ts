@@ -1,96 +1,62 @@
-import type { SourceMeta } from './types';
+// 音源脚本解析
 
-const JSDOC_REGEX = /\/\*\*[\s\S]*?\*\//;
-const NAME_REGEX = /@name\s+(.+)/;
-const VERSION_REGEX = /@version\s+(.+)/;
-const DESCRIPTION_REGEX = /@description\s+(.+)/;
-const AUTHOR_REGEX = /@author\s+(.+)/;
-const HOMEPAGE_REGEX = /@homepage\s+(.+)/;
+import type { CustomSource } from '../types';
 
-export function parseSourceScript(script: string, fileName?: string): SourceMeta {
-  const jsdocMatch = script.match(JSDOC_REGEX);
+const JSDOC_REGEX = /\/\*[\s\S]*?\*\//;
+const TAG_REGEX = (tag: string) => new RegExp(`@${tag}\\s+(.+)`);
+
+export function parseJsSource(name: string, content: string): CustomSource {
+  const jsdocMatch = content.match(JSDOC_REGEX);
   const jsdoc = jsdocMatch ? jsdocMatch[0] : '';
   
-  const nameMatch = jsdoc.match(NAME_REGEX);
-  const versionMatch = jsdoc.match(VERSION_REGEX);
-  const descriptionMatch = jsdoc.match(DESCRIPTION_REGEX);
-  const authorMatch = jsdoc.match(AUTHOR_REGEX);
-  const homepageMatch = jsdoc.match(HOMEPAGE_REGEX);
+  const getTag = (tag: string): string | undefined => {
+    const m = jsdoc.match(TAG_REGEX(tag));
+    return m ? m[1].trim() : undefined;
+  };
   
-  let name = nameMatch ? nameMatch[1].trim() : '';
-  if (!name && fileName) {
-    name = fileName.replace(/\.js$/, '');
-  }
-  if (!name) {
-    name = 'Unknown Source';
-  }
-  
-  const id = generateId(name);
+  const sourceName = getTag('name') || name || 'Unknown Source';
+  const id = generateId(sourceName);
   
   return {
     id,
-    name,
-    version: versionMatch ? versionMatch[1].trim() : '1.0.0',
-    description: descriptionMatch ? descriptionMatch[1].trim() : undefined,
-    author: authorMatch ? authorMatch[1].trim() : undefined,
-    homepage: homepageMatch ? homepageMatch[1].trim() : undefined,
-    enabled: false,
-    loading: false,
-    platforms: [],
-    rawScript: script,
-    successCalls: 0,
-    totalCalls: 0,
+    name: sourceName,
+    version: getTag('version'),
+    author: getTag('author'),
+    description: getTag('description'),
+    script: content,
+    enabled: true,
+    createTime: Date.now(),
+    updateTime: Date.now(),
   };
 }
 
-export function generateId(name: string): string {
+function generateId(name: string): string {
   let id = name.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]/g, '_');
   id = id.replace(/_+/g, '_').replace(/^_|_$/g, '');
   if (!id) id = 'source_' + Date.now();
   return id;
 }
 
-export function generateUniqueId(name: string, existingIds: string[]): string {
-  let id = generateId(name);
-  let counter = 2;
-  
-  while (existingIds.includes(id)) {
-    id = generateId(name) + '_' + counter;
-    counter++;
-  }
-  
-  return id;
-}
-
-export function parseZipContent(content: string): Array<{ name: string; data: string }> {
-  const result: Array<{ name: string; data: string }> = [];
+export function parseZipSource(zipName: string, zipData: Uint8Array): CustomSource[] {
+  const sources: CustomSource[] = [];
   
   try {
-    const bytes = new Uint8Array(content.length);
-    for (let i = 0; i < content.length; i++) {
-      bytes[i] = content.charCodeAt(i);
-    }
+    const eocdOffset = findEOCD(zipData);
+    if (eocdOffset < 0) return sources;
     
-    const eocdOffset = findEOCD(bytes);
-    if (eocdOffset < 0) {
-      return result;
-    }
-    
-    const centralDirOffset = readUint32LE(bytes, eocdOffset + 16);
-    parseCentralDirectory(bytes, centralDirOffset, result);
-  } catch {
+    const centralDirOffset = readUint32LE(zipData, eocdOffset + 16);
+    parseCentralDirectory(zipData, centralDirOffset, sources);
+  } catch (e) {
+    songloft.log.error('Failed to parse ZIP:', e);
   }
   
-  return result;
+  return sources;
 }
 
 function findEOCD(bytes: Uint8Array): number {
-  const signature = [0x50, 0x4B, 0x05, 0x06];
   for (let i = bytes.length - 22; i >= 0; i--) {
-    if (bytes[i] === signature[0] &&
-        bytes[i + 1] === signature[1] &&
-        bytes[i + 2] === signature[2] &&
-        bytes[i + 3] === signature[3]) {
+    if (bytes[i] === 0x50 && bytes[i + 1] === 0x4b &&
+        bytes[i + 2] === 0x05 && bytes[i + 3] === 0x06) {
       return i;
     }
   }
@@ -98,87 +64,83 @@ function findEOCD(bytes: Uint8Array): number {
 }
 
 function readUint32LE(bytes: Uint8Array, offset: number): number {
-  return (bytes[offset] |
-          (bytes[offset + 1] << 8) |
-          (bytes[offset + 2] << 16) |
-          (bytes[offset + 3] << 24)) >>> 0;
+  return (bytes[offset] | (bytes[offset + 1] << 8) |
+          (bytes[offset + 2] << 16) | (bytes[offset + 3] << 24)) >>> 0;
 }
 
 function readUint16LE(bytes: Uint8Array, offset: number): number {
   return bytes[offset] | (bytes[offset + 1] << 8);
 }
 
-function parseCentralDirectory(bytes: Uint8Array, offset: number, result: Array<{ name: string; data: string }>): void {
+function parseCentralDirectory(bytes: Uint8Array, offset: number, result: CustomSource[]): void {
   let pos = offset;
   
-  while (pos + 4 < bytes.length) {
-    const signature = bytes[pos] | (bytes[pos + 1] << 8) | (bytes[pos + 2] << 16) | (bytes[pos + 3] << 24);
-    
-    if (signature !== 0x02014B50) break;
+  while (pos + 46 < bytes.length) {
+    const sig = readUint32LE(bytes, pos);
+    if (sig !== 0x02014B50) break;
     
     const fileNameLength = readUint16LE(bytes, pos + 28);
-    const extraFieldLength = readUint16LE(bytes, pos + 30);
-    const fileCommentLength = readUint16LE(bytes, pos + 32);
+    const extraLength = readUint16LE(bytes, pos + 30);
+    const commentLength = readUint16LE(bytes, pos + 32);
     const compressedSize = readUint32LE(bytes, pos + 20);
-    const uncompressedSize = readUint32LE(bytes, pos + 24);
-    const localHeaderOffset = readUint32LE(bytes, pos + 42);
+    const localOffset = readUint32LE(bytes, pos + 42);
     
     const fileName = String.fromCharCode(...bytes.slice(pos + 46, pos + 46 + fileNameLength));
     
-    if (fileName.endsWith('/') || 
-        fileName.startsWith('__MACOSX/') || 
-        fileName.startsWith('._') || 
-        fileName === '.DS_Store') {
-      pos += 46 + fileNameLength + extraFieldLength + fileCommentLength;
-      continue;
-    }
+    pos += 46 + fileNameLength + extraLength + commentLength;
     
-    if (!fileName.endsWith('.js')) {
-      pos += 46 + fileNameLength + extraFieldLength + fileCommentLength;
+    if (!fileName.endsWith('.js') || fileName.startsWith('__MACOSX/') ||
+        fileName.startsWith('._') || fileName.includes('.DS_Store')) {
       continue;
     }
     
     try {
-      const fileData = readLocalFile(bytes, localHeaderOffset, compressedSize, uncompressedSize);
-      if (fileData) {
-        result.push({ name: fileName, data: fileData });
+      const content = readLocalFile(bytes, localOffset, compressedSize);
+      if (content) {
+        const name = fileName.replace(/\.js$/, '').split('/').pop() || 'source';
+        result.push(parseJsSource(name, content));
       }
     } catch {
+      // ignore
     }
-    
-    pos += 46 + fileNameLength + extraFieldLength + fileCommentLength;
   }
 }
 
-function readLocalFile(bytes: Uint8Array, offset: number, compressedSize: number, uncompressedSize: number): string | null {
+function readLocalFile(bytes: Uint8Array, offset: number, compressedSize: number): string | null {
   if (offset + 30 > bytes.length) return null;
   
-  const signature = bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16) | (bytes[offset + 3] << 24);
-  if (signature !== 0x04034B50) return null;
+  const sig = readUint32LE(bytes, offset);
+  if (sig !== 0x04034B50) return null;
   
   const fileNameLength = readUint16LE(bytes, offset + 26);
-  const extraFieldLength = readUint16LE(bytes, offset + 28);
+  const extraLength = readUint16LE(bytes, offset + 28);
   const compressionMethod = readUint16LE(bytes, offset + 10);
   
-  const dataOffset = offset + 30 + fileNameLength + extraFieldLength;
+  const dataOffset = offset + 30 + fileNameLength + extraLength;
   
   if (compressionMethod === 0) {
-    return String.fromCharCode(...bytes.slice(dataOffset, dataOffset + uncompressedSize));
+    return String.fromCharCode(...bytes.slice(dataOffset, dataOffset + compressedSize));
   } else if (compressionMethod === 8) {
     try {
       const hex = Array.from(bytes.slice(dataOffset, dataOffset + compressedSize))
         .map(b => b.toString(16).padStart(2, '0'))
         .join('');
-      const inflatedHex = __go_raw_inflate(hex);
-      const inflatedBytes = new Uint8Array(inflatedHex.length / 2);
-      for (let i = 0; i < inflatedBytes.length; i++) {
-        inflatedBytes[i] = parseInt(inflatedHex.substr(i * 2, 2), 16);
+      // 使用宿主提供的 inflate
+      if (typeof __go_raw_inflate === 'function') {
+        const inflatedHex = __go_raw_inflate(hex);
+        const inflatedBytes = new Uint8Array(inflatedHex.length / 2);
+        for (let i = 0; i < inflatedBytes.length; i++) {
+          inflatedBytes[i] = parseInt(inflatedHex.substr(i * 2, 2), 16);
+        }
+        return new TextDecoder().decode(inflatedBytes);
       }
-      return new TextDecoder('utf-8').decode(inflatedBytes);
     } catch {
-      return null;
+      // ignore
     }
   }
   
   return null;
 }
+
+// 宿主注入的 inflate 函数
+declare const __go_raw_inflate: (hex: string) => string;

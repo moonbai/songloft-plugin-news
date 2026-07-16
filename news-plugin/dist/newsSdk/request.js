@@ -1,6 +1,4 @@
-"use strict";
 // HTTP 请求封装
-Object.defineProperty(exports, "__esModule", { value: true });
 function httpFetch(url, options = {}) {
     return (async () => {
         const resp = await songloft.http.fetch(url, {
@@ -27,4 +25,4 @@ function httpFetch(url, options = {}) {
         };
     })();
 }
-exports.default = httpFetch;
+export default httpFetch;

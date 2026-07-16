@@ -1,9 +1,5 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.httpGet = httpGet;
-exports.httpGetJson = httpGetJson;
 // 通用 HTTP 工具
-async function httpGet(url, headers = {}) {
+export async function httpGet(url, headers = {}) {
     const resp = await songloft.http.fetch(url, {
         method: 'GET',
         headers,
@@ -11,7 +7,7 @@ async function httpGet(url, headers = {}) {
     });
     return typeof resp.body === 'string' ? resp.body : new TextDecoder().decode(resp.body);
 }
-async function httpGetJson(url, headers = {}) {
+export async function httpGetJson(url, headers = {}) {
     const resp = await songloft.http.fetch(url, {
         method: 'GET',
         headers,

@@ -1,4 +1,9 @@
-import httpFetch from '../request';
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const request_1 = __importDefault(require("../request"));
 function normalizeSong(song) {
     return {
         name: String(song.name || song.songName || ''),
@@ -14,7 +19,7 @@ function normalizeSong(song) {
 const musicSearch = {
     async search(keyword, page, limit) {
         const url = `http://search.kuwo.cn/r.s?all=${encodeURIComponent(keyword)}&ft=music&itemset=web_2013&clientver=1.1.1&pn=${page}&rn=${limit}&rformat=json&encoding=utf8`;
-        const { body } = await httpFetch(url).promise;
+        const { body } = await (0, request_1.default)(url).promise;
         const data = body;
         const songs = (data.musiclist || []).map(normalizeSong);
         return { songs, total: Number(data.total || songs.length) };
@@ -25,7 +30,7 @@ async function getLyric(songInfo) {
     if (!musicId)
         return null;
     const url = `http://lyrics.kuwo.cn/lyrics?musicId=${musicId}`;
-    const { body } = await httpFetch(url).promise;
+    const { body } = await (0, request_1.default)(url).promise;
     const data = body;
     if (data && typeof data === 'object') {
         return {
@@ -43,14 +48,14 @@ const songList = {
     },
     async detail(id) {
         const url = `http://www.kuwo.cn/api/www/playlist/playListInfo?pid=${id}&pn=1&rn=1000`;
-        const { body } = await httpFetch(url).promise;
+        const { body } = await (0, request_1.default)(url).promise;
         const data = body;
         const songs = (data.data?.musicList || []).map(normalizeSong);
         return { songs };
     },
     async search(keyword, page, limit) {
         const url = `http://www.kuwo.cn/api/www/playlist/searchPlayList?key=${encodeURIComponent(keyword)}&pn=${page}&rn=${limit}`;
-        const { body } = await httpFetch(url).promise;
+        const { body } = await (0, request_1.default)(url).promise;
         const data = body;
         const playlists = (data.data?.list || []).map((p) => {
             return {
@@ -71,7 +76,7 @@ const songList = {
 const leaderboard = {
     async boards() {
         const url = 'http://www.kuwo.cn/api/www/bang/bangList?pn=1&rn=30';
-        const { body } = await httpFetch(url).promise;
+        const { body } = await (0, request_1.default)(url).promise;
         const data = body;
         const boards = (data.data?.list || []).map((b) => {
             return {
@@ -84,7 +89,7 @@ const leaderboard = {
     },
     async list(id, page, limit) {
         const url = `http://www.kuwo.cn/api/www/bang/bangInfo?bangId=${id}&pn=${page}&rn=${limit}`;
-        const { body } = await httpFetch(url).promise;
+        const { body } = await (0, request_1.default)(url).promise;
         const data = body;
         const songs = (data.data?.musicList || []).map(normalizeSong);
         return { songs };
@@ -96,4 +101,4 @@ const kw = {
     songList,
     leaderboard,
 };
-export default kw;
+exports.default = kw;

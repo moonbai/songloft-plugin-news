@@ -1,5 +1,16 @@
-import type { SourceRuntimeOptions, LxSource, DispatchResult } from './types';
+import type { LxSource } from './types';
 import { LX_PRELUDE_JS } from './lx_prelude';
+
+export interface SourceRuntimeOptions {
+  id: string;
+  name: string;
+}
+
+export interface DispatchResult {
+  id: string;
+  result?: unknown;
+  error?: string;
+}
 
 export class SourceRuntime {
   private envName: string;
@@ -9,11 +20,13 @@ export class SourceRuntime {
   private successCalls = 0;
   private totalCalls = 0;
   private inited = false;
+  private rawScript = '';
 
   constructor(options: SourceRuntimeOptions) {
     this.id = options.id;
     this.name = options.name;
-    this.envName = 'lx_source_' + this.id.replace(/[^a-zA-Z0-9_]/g, '_');
+    // 环境名只能用安全字符
+    this.envName = 'lx_' + this.id.replace(/[^a-zA-Z0-9_]/g, (c) => '_' + c.charCodeAt(0).toString(16));
   }
 
   getEnvName(): string {
@@ -33,7 +46,13 @@ export class SourceRuntime {
   }
 
   getPlatforms(): string[] {
-    return [...new Set(this.sources.map(s => s.name))];
+    const platforms = new Set<string>();
+    for (const source of this.sources) {
+      if (source.name) {
+        platforms.add(source.name);
+      }
+    }
+    return Array.from(platforms);
   }
 
   isInited(): boolean {
@@ -48,19 +67,24 @@ export class SourceRuntime {
   }
 
   async init(rawScript: string): Promise<boolean> {
+    this.rawScript = rawScript;
+    
     try {
-      songloft.jsenv.create(this.envName, LX_PRELUDE_JS);
+      // 创建子 VM，注入 prelude
+      await songloft.jsenv.create(this.envName, LX_PRELUDE_JS);
       
-      songloft.jsenv.execute(this.envName, `
+      // 注入脚本信息 (rawScript 必须是真实源码)
+      await songloft.jsenv.execute(this.envName, `
         lx._sourceId = '${this.id}';
         globalThis.lx.currentScriptInfo = {
-          name: '${this.name}',
+          name: '${this.name.replace(/'/g, "\\'")}',
           version: '1.0.0',
           rawScript: ${JSON.stringify(rawScript)}
         };
       `);
 
-      const result = songloft.jsenv.executeWait(
+      // 执行用户脚本，等待 inited 事件
+      const result = await songloft.jsenv.executeWait(
         this.envName,
         rawScript,
         30000,
@@ -87,13 +111,21 @@ export class SourceRuntime {
   }
 
   private parseEventResult(result: unknown): { eventName: string; data: unknown } | null {
+    if (!result) return null;
     try {
-      const str = String(result);
-      const parsed = JSON.parse(str);
-      if (parsed && parsed.eventName) {
-        return parsed;
+      if (typeof result === 'string') {
+        const parsed = JSON.parse(result);
+        if (parsed && parsed.eventName) {
+          return parsed;
+        }
+      } else if (typeof result === 'object') {
+        const obj = result as Record<string, unknown>;
+        if (obj.eventName) {
+          return obj as { eventName: string; data: unknown };
+        }
       }
     } catch {
+      // ignore
     }
     return null;
   }
@@ -113,7 +145,7 @@ export class SourceRuntime {
       };
       const dispatchCode = `lx._dispatch('${reqId}', 'request', ${JSON.stringify(dispatchData)});`;
 
-      const result = songloft.jsenv.executeWait(
+      const result = await songloft.jsenv.executeWait(
         this.envName,
         dispatchCode,
         18000,
@@ -141,23 +173,34 @@ export class SourceRuntime {
   }
 
   private parseDispatchResult(result: unknown): DispatchResult | null {
+    if (!result) return null;
     try {
-      const str = String(result);
-      const parsed = JSON.parse(str);
-      if (parsed && typeof parsed.id === 'string') {
-        return parsed;
+      if (typeof result === 'string') {
+        const parsed = JSON.parse(result);
+        if (parsed && typeof parsed.id === 'string') {
+          return parsed as DispatchResult;
+        }
+      } else if (typeof result === 'object') {
+        const obj = result as Record<string, unknown>;
+        if (typeof obj.id === 'string') {
+          return obj as unknown as DispatchResult;
+        }
       }
     } catch {
+      // ignore
     }
     return null;
   }
 
   private extractUrl(result: unknown): string | null {
-    if (typeof result === 'string') {
+    if (typeof result === 'string' && result) {
       return result;
     }
-    if (result && typeof result === 'object' && typeof (result as Record<string, unknown>).url === 'string') {
-      return String((result as Record<string, unknown>).url);
+    if (result && typeof result === 'object') {
+      const obj = result as Record<string, unknown>;
+      if (typeof obj.url === 'string' && obj.url) {
+        return obj.url;
+      }
     }
     return null;
   }
@@ -166,6 +209,7 @@ export class SourceRuntime {
     try {
       songloft.jsenv.destroy(this.envName);
     } catch {
+      // ignore
     }
     this.inited = false;
     this.sources = [];

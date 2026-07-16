@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES2020",
-    "module": "CommonJS",
+    "module": "ESNext",
     "lib": ["ES2020", "DOM"],
     "outDir": "./dist",
     "rootDir": "./src",
@@ -13,11 +13,8 @@
     "declaration": false,
     "sourceMap": false,
     "noImplicitAny": false,
-    "moduleResolution": "node",
-    "baseUrl": "./src",
-    "paths": {
-      "@songloft/plugin-sdk": ["@songloft/plugin-sdk/index.ts"]
-    }
+    "moduleResolution": "bundler",
+    "ignoreDeprecations": "6.0"
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]

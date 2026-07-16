@@ -66,4 +66,4 @@ export function generateRandomId(): string {
 }
 
 export { httpFetch } from './request';
-export { CryptoShim } from './crypto-shim';
+export * from './crypto-shim';

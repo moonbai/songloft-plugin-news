@@ -1,105 +1,104 @@
+// 加密适配层 - 收敛所有加密调用
+// 宿主提供的 crypto polyfill + CryptoJS
+
 import CryptoJS from 'crypto-js';
 
-export function md5(data: string | Uint8Array): string {
-  if (data instanceof Uint8Array) {
-    const hex = Array.from(data).map(b => b.toString(16).padStart(2, '0')).join('');
-    return CryptoJS.MD5(CryptoJS.enc.Hex.parse(hex)).toString();
+// 宿主提供的加密接口
+declare const hostCrypto: {
+  md5: (data: string) => string;
+  aesEncrypt: (data: string, key: string, iv: string) => string;
+  rsaEncrypt: (data: string, publicKey: string) => string;
+  randomBytes: (n: number) => Uint8Array;
+};
+
+// MD5 哈希
+export function md5(data: string): string {
+  try {
+    return (crypto as any).md5(data);
+  } catch {
+    return CryptoJS.MD5(data).toString();
   }
-  return CryptoJS.MD5(data).toString();
 }
 
-export function sha1(data: string | Uint8Array): string {
-  if (data instanceof Uint8Array) {
-    const hex = Array.from(data).map(b => b.toString(16).padStart(2, '0')).join('');
-    return CryptoJS.SHA1(CryptoJS.enc.Hex.parse(hex)).toString();
+// AES 加密 (CBC 模式)
+export function aesEncrypt(data: string, key: string, iv: string): string {
+  try {
+    return (crypto as any).aesEncrypt(data, key, iv);
+  } catch {
+    const k = CryptoJS.enc.Utf8.parse(key);
+    const i = CryptoJS.enc.Utf8.parse(iv);
+    const encrypted = CryptoJS.AES.encrypt(data, k, {
+      iv: i,
+      mode: CryptoJS.mode.CBC,
+      padding: CryptoJS.pad.Pkcs7,
+    });
+    return encrypted.toString();
   }
-  return CryptoJS.SHA1(data).toString();
 }
 
-export function sha256(data: string | Uint8Array): string {
-  if (data instanceof Uint8Array) {
-    const hex = Array.from(data).map(b => b.toString(16).padStart(2, '0')).join('');
-    return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString();
-  }
-  return CryptoJS.SHA256(data).toString();
-}
-
-export function hmacSHA1(data: string, key: string): string {
-  return CryptoJS.HmacSHA1(data, key).toString();
-}
-
-export function hmacSHA256(data: string, key: string): string {
-  return CryptoJS.HmacSHA256(data, key).toString();
-}
-
-export function aesEncrypt(data: string, key: string, iv?: string): string {
-  const keyBytes = CryptoJS.enc.Utf8.parse(key);
-  const ivBytes = iv ? CryptoJS.enc.Utf8.parse(iv) : undefined;
-  const encrypted = ivBytes
-    ? CryptoJS.AES.encrypt(data, keyBytes, { iv: ivBytes, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 })
-    : CryptoJS.AES.encrypt(data, keyBytes, { mode: CryptoJS.mode.ECB, padding: CryptoJS.pad.Pkcs7 });
-  return encrypted.toString();
-}
-
-export function aesDecrypt(data: string, key: string, iv?: string): string {
-  const keyBytes = CryptoJS.enc.Utf8.parse(key);
-  const ivBytes = iv ? CryptoJS.enc.Utf8.parse(iv) : undefined;
-  const decrypted = ivBytes
-    ? CryptoJS.AES.decrypt(data, keyBytes, { iv: ivBytes, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 })
-    : CryptoJS.AES.decrypt(data, keyBytes, { mode: CryptoJS.mode.ECB, padding: CryptoJS.pad.Pkcs7 });
+// AES 解密
+export function aesDecrypt(data: string, key: string, iv: string): string {
+  const k = CryptoJS.enc.Utf8.parse(key);
+  const i = CryptoJS.enc.Utf8.parse(iv);
+  const decrypted = CryptoJS.AES.decrypt(data, k, {
+    iv: i,
+    mode: CryptoJS.mode.CBC,
+    padding: CryptoJS.pad.Pkcs7,
+  });
   return decrypted.toString(CryptoJS.enc.Utf8);
 }
 
+// RSA 加密
+export function rsaEncrypt(data: string, publicKey: string): string {
+  return (crypto as any).rsaEncrypt(data, publicKey);
+}
+
+// 随机字节
+export function randomBytes(length: number): Uint8Array {
+  return (crypto as any).randomBytes(length);
+}
+
+// Base64 编码
 export function base64Encode(data: string): string {
   return CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(data));
 }
 
+// Base64 解码
 export function base64Decode(data: string): string {
   return CryptoJS.enc.Base64.parse(data).toString(CryptoJS.enc.Utf8);
 }
 
-export function rsaEncrypt(data: string, publicKey: string): string {
-  try {
-    return crypto.rsaEncrypt(data, publicKey);
-  } catch {
-    throw new Error('RSA encrypt not supported in this environment');
-  }
-}
-
-export function randomBytes(length: number): Uint8Array {
-  try {
-    return crypto.randomBytes(length);
-  } catch {
-    const array = new Uint8Array(length);
-    for (let i = 0; i < length; i++) {
-      array[i] = Math.floor(Math.random() * 256);
-    }
-    return array;
-  }
-}
-
+// 字符串转字节数组
 export function stringToBytes(str: string): Uint8Array {
   return new Uint8Array(str.split('').map(c => c.charCodeAt(0)));
 }
 
+// 字节数组转字符串
 export function bytesToString(bytes: Uint8Array): string {
-  return Array.from(bytes).map(b => String.fromCharCode(b)).join('');
+  return String.fromCharCode(...Array.from(bytes));
 }
 
-export const CryptoShim = {
-  md5,
-  sha1,
-  sha256,
-  hmacSHA1,
-  hmacSHA256,
-  aesEncrypt,
-  aesDecrypt,
-  base64Encode,
-  base64Decode,
-  rsaEncrypt,
-  randomBytes,
-  stringToBytes,
-  bytesToString,
-};
+// HMAC-SHA1
+export function hmacSha1(data: string, key: string): string {
+  return CryptoJS.HmacSHA1(data, key).toString();
+}
 
-export default CryptoShim;
+// SHA256
+export function sha256(data: string): string {
+  return CryptoJS.SHA256(data).toString();
+}
+
+// Hex 编解码
+export function hexEncode(bytes: Uint8Array): string {
+  return Array.from(bytes)
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+export function hexDecode(hex: string): Uint8Array {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < bytes.length; i++) {
+    bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
+  }
+  return bytes;
+}

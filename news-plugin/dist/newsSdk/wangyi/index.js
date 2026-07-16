@@ -1,9 +1,4 @@
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-const request_1 = __importDefault(require("../request"));
+import httpFetch from '../request';
 function normalizeArticle(article) {
     return {
         id: String(article.docid || article.id || article.sketchid || ''),
@@ -22,7 +17,7 @@ function normalizeArticle(article) {
 const newsList = {
     async list(category, page, limit) {
         const url = `https://3g.163.com/touch/reconstruct/article/list/${category || 'BBM54PGAwangning'}/${page}-${limit}.html`;
-        const resp = await (0, request_1.default)(url, {
+        const resp = await httpFetch(url, {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 13_0 like Mac OS X)',
             },
@@ -52,7 +47,7 @@ const newsList = {
 const newsDetail = {
     async detail(id) {
         const url = `https://www.163.com/news/article/${id}.html`;
-        const resp = await (0, request_1.default)(url, {
+        const resp = await httpFetch(url, {
             headers: { 'User-Agent': 'Mozilla/5.0' },
         });
         const raw = String(resp.body || '');
@@ -73,7 +68,7 @@ const newsDetail = {
 const newsSearch = {
     async search(keyword, page, limit) {
         const url = `https://www.163.com/search?keyword=${encodeURIComponent(keyword)}`;
-        const resp = await (0, request_1.default)(url, {
+        const resp = await httpFetch(url, {
             headers: { 'User-Agent': 'Mozilla/5.0' },
         });
         const raw = String(resp.body || '');
@@ -112,4 +107,4 @@ const wangyi = {
     newsSearch,
     hotboard,
 };
-exports.default = wangyi;
+export default wangyi;

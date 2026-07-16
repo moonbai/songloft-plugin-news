@@ -1,10 +1,7 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.createSearchHandlers = createSearchHandlers;
 // 搜索处理
-const facade_1 = require("../newsSdk/facade");
-const response_1 = require("./response");
-function createSearchHandlers() {
+import { sources, platformModules } from '../newsSdk/facade';
+import { successResponse, errorResponse, badRequestResponse } from './response';
+export function createSearchHandlers() {
     return {
         async search(req) {
             try {
@@ -27,14 +24,14 @@ function createSearchHandlers() {
                     page_size = Number(params.page_size) || 20;
                 }
                 if (!keyword)
-                    return (0, response_1.badRequestResponse)('Keyword is required');
+                    return badRequestResponse('Keyword is required');
                 // 如果是 all，则并行查询所有平台
                 if (source_id === 'all') {
-                    const promises = facade_1.sources
-                        .filter(s => facade_1.platformModules[s.id])
+                    const promises = sources
+                        .filter(s => platformModules[s.id])
                         .map(async (s) => {
                         try {
-                            const result = await facade_1.platformModules[s.id].newsSearch.search(keyword, 1, 5);
+                            const result = await platformModules[s.id].newsSearch.search(keyword, 1, 5);
                             return result.news;
                         }
                         catch (e) {
@@ -46,30 +43,30 @@ function createSearchHandlers() {
                     for (const arr of results) {
                         allNews.push(...arr);
                     }
-                    return (0, response_1.successResponse)({
+                    return successResponse({
                         results: allNews.slice(0, page_size),
                         total: allNews.length,
                     });
                 }
-                const module = facade_1.platformModules[source_id];
+                const module = platformModules[source_id];
                 if (!module)
-                    return (0, response_1.badRequestResponse)('Unknown source');
+                    return badRequestResponse('Unknown source');
                 const result = await module.newsSearch.search(keyword, page, page_size);
-                return (0, response_1.successResponse)({
+                return successResponse({
                     results: result.news,
                     total: result.total,
                 });
             }
             catch (e) {
-                return (0, response_1.errorResponse)('Search failed: ' + e.message);
+                return errorResponse('Search failed: ' + e.message);
             }
         },
         async getSources(req) {
             try {
-                return (0, response_1.successResponse)(facade_1.sources);
+                return successResponse(sources);
             }
             catch (e) {
-                return (0, response_1.errorResponse)('Failed to get sources');
+                return errorResponse('Failed to get sources');
             }
         },
     };

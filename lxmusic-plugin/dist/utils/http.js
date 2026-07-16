@@ -1,4 +1,10 @@
-export async function callHostAPI(path, options = {}) {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.callHostAPI = callHostAPI;
+exports.importSongToLibrary = importSongToLibrary;
+exports.createPlaylist = createPlaylist;
+exports.addSongToPlaylist = addSongToPlaylist;
+async function callHostAPI(path, options = {}) {
     const hostUrl = await songloft.plugin.getHostUrl();
     const token = await songloft.plugin.getToken();
     const url = hostUrl + path;
@@ -16,7 +22,7 @@ export async function callHostAPI(path, options = {}) {
     const response = await fetch(url, fetchOptions);
     return response.json();
 }
-export async function importSongToLibrary(song) {
+async function importSongToLibrary(song) {
     const dedupKey = generateDedupKey(song.source_data);
     return callHostAPI('/api/v1/songs/remote', {
         method: 'POST',
@@ -49,7 +55,7 @@ function generateDedupKey(sourceData) {
     }
     return '';
 }
-export async function createPlaylist(name, description) {
+async function createPlaylist(name, description) {
     return callHostAPI('/api/v1/playlists', {
         method: 'POST',
         body: {
@@ -58,7 +64,7 @@ export async function createPlaylist(name, description) {
         },
     });
 }
-export async function addSongToPlaylist(playlistId, songId) {
+async function addSongToPlaylist(playlistId, songId) {
     return callHostAPI(`/api/v1/playlists/${playlistId}/songs`, {
         method: 'POST',
         body: {

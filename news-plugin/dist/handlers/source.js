@@ -1,8 +1,5 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.createSourceHandlers = createSourceHandlers;
-const response_1 = require("./response");
-function createSourceHandlers(sourceManager) {
+import { successResponse, errorResponse, badRequestResponse } from './response';
+export function createSourceHandlers(sourceManager) {
     return {
         /**
          * 获取所有 source
@@ -20,10 +17,10 @@ function createSourceHandlers(sourceManager) {
                     createTime: s.createTime,
                     updateTime: s.updateTime,
                 }));
-                return (0, response_1.successResponse)({ sources });
+                return successResponse({ sources });
             }
             catch (e) {
-                return (0, response_1.errorResponse)('Failed to get sources');
+                return errorResponse('Failed to get sources');
             }
         },
         /**
@@ -34,18 +31,18 @@ function createSourceHandlers(sourceManager) {
                 const request = req;
                 const body = request.body;
                 if (!body)
-                    return (0, response_1.badRequestResponse)('No body provided');
+                    return badRequestResponse('No body provided');
                 const text = new TextDecoder().decode(body);
                 const parsed = JSON.parse(text);
                 const name = String(parsed.name || 'imported_source');
                 const content = String(parsed.content || '');
                 if (!content)
-                    return (0, response_1.badRequestResponse)('content is required');
+                    return badRequestResponse('content is required');
                 const source = sourceManager.importJs(name, content);
-                return (0, response_1.successResponse)({ source });
+                return successResponse({ source });
             }
             catch (e) {
-                return (0, response_1.errorResponse)('Failed to import source: ' + e.message);
+                return errorResponse('Failed to import source: ' + e.message);
             }
         },
         /**
@@ -56,17 +53,17 @@ function createSourceHandlers(sourceManager) {
                 const request = req;
                 const body = request.body;
                 if (!body)
-                    return (0, response_1.badRequestResponse)('No body provided');
+                    return badRequestResponse('No body provided');
                 const text = new TextDecoder().decode(body);
                 const parsed = JSON.parse(text);
                 const url = String(parsed.url || '');
                 if (!url)
-                    return (0, response_1.badRequestResponse)('url is required');
+                    return badRequestResponse('url is required');
                 const result = await sourceManager.importFromUrl(url);
-                return (0, response_1.successResponse)({ sources: Array.isArray(result) ? result : [result] });
+                return successResponse({ sources: Array.isArray(result) ? result : [result] });
             }
             catch (e) {
-                return (0, response_1.errorResponse)('Failed to import from URL: ' + e.message);
+                return errorResponse('Failed to import from URL: ' + e.message);
             }
         },
         /**
@@ -77,20 +74,20 @@ function createSourceHandlers(sourceManager) {
                 const request = req;
                 const body = request.body;
                 if (!body)
-                    return (0, response_1.badRequestResponse)('No body provided');
+                    return badRequestResponse('No body provided');
                 const text = new TextDecoder().decode(body);
                 const parsed = JSON.parse(text);
                 const id = String(parsed.id || '');
                 const enabled = Boolean(parsed.enabled);
                 if (!id)
-                    return (0, response_1.badRequestResponse)('id is required');
+                    return badRequestResponse('id is required');
                 const success = sourceManager.setEnabled(id, enabled);
                 if (!success)
-                    return (0, response_1.errorResponse)('Source not found', 404);
-                return (0, response_1.successResponse)({ success: true });
+                    return errorResponse('Source not found', 404);
+                return successResponse({ success: true });
             }
             catch (e) {
-                return (0, response_1.errorResponse)('Failed to toggle source');
+                return errorResponse('Failed to toggle source');
             }
         },
         /**
@@ -102,14 +99,14 @@ function createSourceHandlers(sourceManager) {
                 const query = request.query || {};
                 const id = String(query.id || '');
                 if (!id)
-                    return (0, response_1.badRequestResponse)('id is required');
+                    return badRequestResponse('id is required');
                 const success = sourceManager.delete(id);
                 if (!success)
-                    return (0, response_1.errorResponse)('Source not found', 404);
-                return (0, response_1.successResponse)({ success: true });
+                    return errorResponse('Source not found', 404);
+                return successResponse({ success: true });
             }
             catch (e) {
-                return (0, response_1.errorResponse)('Failed to delete source');
+                return errorResponse('Failed to delete source');
             }
         },
         /**
@@ -118,10 +115,10 @@ function createSourceHandlers(sourceManager) {
         async reloadSources(req) {
             try {
                 await sourceManager.reloadAll();
-                return (0, response_1.successResponse)({ success: true });
+                return successResponse({ success: true });
             }
             catch (e) {
-                return (0, response_1.errorResponse)('Failed to reload sources');
+                return errorResponse('Failed to reload sources');
             }
         },
         /**
@@ -130,10 +127,10 @@ function createSourceHandlers(sourceManager) {
         async exportSources(req) {
             try {
                 const config = sourceManager.exportConfig();
-                return (0, response_1.successResponse)({ sources: config });
+                return successResponse({ sources: config });
             }
             catch (e) {
-                return (0, response_1.errorResponse)('Failed to export sources');
+                return errorResponse('Failed to export sources');
             }
         },
     };

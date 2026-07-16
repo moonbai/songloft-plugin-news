@@ -1,4 +1,9 @@
-import httpFetch from '../request';
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const request_1 = __importDefault(require("../request"));
 function normalizeSong(song) {
     return {
         name: String(song.name || song.songName || ''),
@@ -14,7 +19,7 @@ function normalizeSong(song) {
 const musicSearch = {
     async search(keyword, page, limit) {
         const url = `http://search.migu.cn/migu/remoting/scr_search_tag?keyword=${encodeURIComponent(keyword)}&type=2&pgc=${page}&rowc=${limit}&issubtitle=false`;
-        const { body } = await httpFetch(url).promise;
+        const { body } = await (0, request_1.default)(url).promise;
         const data = body;
         const songs = (data.result?.songlist || []).map(normalizeSong);
         return { songs, total: Number(data.total || songs.length) };
@@ -54,4 +59,4 @@ const mg = {
     songList,
     leaderboard,
 };
-export default mg;
+exports.default = mg;

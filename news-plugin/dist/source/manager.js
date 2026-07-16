@@ -1,9 +1,6 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.SourceManager = void 0;
-const storage_1 = require("./storage");
-const parser_1 = require("./parser");
-class SourceManager {
+import { getStoredSources, setStoredSources } from './storage';
+import { parseJsSource, parseZipSource } from './parser';
+export class SourceManager {
     constructor(runtimeManager) {
         this.runtimeManager = runtimeManager;
         this.sources = new Map();
@@ -12,7 +9,7 @@ class SourceManager {
      * 初始化 - 加载所有已保存的 source
      */
     async init() {
-        const stored = (0, storage_1.getStoredSources)();
+        const stored = getStoredSources();
         for (const src of stored) {
             this.sources.set(src.id, src);
         }
@@ -49,7 +46,7 @@ class SourceManager {
      * 从 JS 文本导入 source
      */
     importJs(name, content) {
-        const source = (0, parser_1.parseJsSource)(name, content);
+        const source = parseJsSource(name, content);
         this.sources.set(source.id, source);
         this.persist();
         if (source.enabled) {
@@ -69,7 +66,7 @@ class SourceManager {
         if (data[0] === 0x50 && data[1] === 0x4b && data[2] === 0x03 && data[3] === 0x04) {
             // ZIP 文件
             const zipName = url.split('/').pop()?.replace(/\.zip$/i, '') || 'zip_source';
-            const sources = (0, parser_1.parseZipSource)(zipName, data);
+            const sources = parseZipSource(zipName, data);
             for (const source of sources) {
                 this.sources.set(source.id, source);
                 if (source.enabled) {
@@ -92,7 +89,7 @@ class SourceManager {
      * 从 ZIP 数据导入
      */
     importZip(name, zipData) {
-        const sources = (0, parser_1.parseZipSource)(name, zipData);
+        const sources = parseZipSource(name, zipData);
         for (const source of sources) {
             this.sources.set(source.id, source);
             if (source.enabled) {
@@ -161,7 +158,6 @@ class SourceManager {
         }));
     }
     persist() {
-        (0, storage_1.setStoredSources)(Array.from(this.sources.values()));
+        setStoredSources(Array.from(this.sources.values()));
     }
 }
-exports.SourceManager = SourceManager;

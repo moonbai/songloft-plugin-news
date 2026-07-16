@@ -1,3 +1,6 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.httpFetch = httpFetch;
 function urlEncodeForm(form) {
     return Object.keys(form)
         .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(form[key])}`)
@@ -30,7 +33,7 @@ function buildHeaders(options) {
     }
     return headers;
 }
-export function httpFetch(url, options = {}) {
+function httpFetch(url, options = {}) {
     const abortController = new AbortController();
     const timeout = options.timeout || 10000;
     const timeoutId = setTimeout(() => {
@@ -80,4 +83,4 @@ export function httpFetch(url, options = {}) {
         cancelHttp: () => abortController.abort(),
     };
 }
-export default httpFetch;
+exports.default = httpFetch;
