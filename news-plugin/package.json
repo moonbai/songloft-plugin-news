@@ -1,0 +1,16 @@
+{
+  "name": "songloft-plugin-news",
+  "version": "1.0.0",
+  "description": "多平台新闻资讯聚合插件，支持内置平台 + 自定义解析脚本",
+  "main": "dist/main.js",
+  "author": "songloft",
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc --outDir dist && mkdir -p dist/static && cp -r static/* dist/static/ && cd dist && zip -r news.jsplugin.zip .",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}

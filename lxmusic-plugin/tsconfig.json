@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "noEmit": false,
+    "outDir": "./dist",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "@songloft/plugin-sdk": ["src/@songloft/plugin-sdk/index.ts"]
+    },
+    "lib": ["ES2020", "DOM"]
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules"]
+}

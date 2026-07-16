@@ -1,0 +1,19 @@
+{
+  "name": "songloft-plugin-lxmusic",
+  "version": "1.0.0",
+  "description": "Songloft plugin for lx-music ecosystem",
+  "main": "main.js",
+  "scripts": {
+    "build": "tsc --outDir dist && mkdir -p dist/static && cp -r static/* dist/static/ && cd dist && zip -r lxmusic.jsplugin.zip .",
+    "dev": "tsc --watch --outDir dist",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "devDependencies": {
+    "@types/crypto-js": "^4.2.2",
+    "typescript": "^5.4.0"
+  },
+  "dependencies": {
+    "crypto-js": "^4.2.0"
+  }
+}

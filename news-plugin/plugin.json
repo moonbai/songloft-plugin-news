@@ -1,0 +1,19 @@
+{
+  "id": "songloft-plugin-news",
+  "name": "新闻资讯聚合",
+  "version": "1.0.0",
+  "description": "聚合多平台新闻资讯（今日头条、澎湃新闻、网易新闻、百度热搜、知乎热榜），支持自定义解析脚本",
+  "author": "songloft",
+  "main": "main.js",
+  "permissions": [
+    "http_request",
+    "storage",
+    "jsenv"
+  ],
+  "static": "static/",
+  "entry": {
+    "onInit": "onInit",
+    "onDeinit": "onDeinit",
+    "onHTTPRequest": "onHTTPRequest"
+  }
+}
