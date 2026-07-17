@@ -4,7 +4,7 @@
 import { createRouter, jsonResponse } from './@songloft/plugin-sdk';
 import { RuntimeManager } from './engine';
 import { SourceManager } from './source';
-import { sources } from './newsSdk/facade';
+import { sources, platformModules } from './newsSdk/facade';
 import { createSearchHandlers, createNewsHandlers, createSourceHandlers, createPlayerHandlers } from './handlers';
 
 let router: ReturnType<typeof createRouter> | null = null;
@@ -52,10 +52,14 @@ function setupRouter(): void {
   router.get('/api/aggregate/hotboard', async (req) => {
     try {
       const limit = Number(req.query.limit) || 10;
-      const platforms = ['weibo', 'baidu', 'zhihu', '36kr', 'toutiao'];
+      const platforms = ['baidu', 'zhihu', 'wangyi'];
       const promises = platforms.map(async (source) => {
         try {
-          const result = await runtimeManager!.fetchNewsList(source, 'hot', 1, limit);
+          const module = platformModules[source];
+          if (!module?.hotboard) return { source, news: [] };
+          const boards = await module.hotboard.boards();
+          if (boards.length === 0) return { source, news: [] };
+          const result = await module.hotboard.list(boards[0].id, 1, limit);
           return { source, news: result.news };
         } catch (e) {
           return { source, news: [], error: String(e) };

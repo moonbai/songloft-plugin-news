@@ -219,6 +219,27 @@ jobs:
             [ -z "$ZIP_FILE" ] && ZIP_FILE=$(ls release-assets/*.jsplugin.zip 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "")
             echo "| $PLUGIN_NAME | \`$ENTRY_HASH\` | \`$ZIP_HASH\` | [$ZIP_FILE](https://github.com/moonbai/songloft-plugins/releases/download/v${{ needs.discover.outputs.version }}/$ZIP_FILE) |" >> $GITHUB_OUTPUT
           done
+          echo "" >> $GITHUB_OUTPUT
+          echo "---" >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+          echo "### 更新履历" >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+          # 遍历每个插件目录，读取 CHANGELOG.md
+          for dir in */; do
+            [ -f "${dir}plugin.json" ] || continue
+            PLUGIN_NAME=$(node -e "console.log(JSON.parse(require('fs').readFileSync('${dir}plugin.json','utf8')).name||'unknown')")
+            if [ -f "${dir}CHANGELOG.md" ]; then
+              echo "#### $PLUGIN_NAME" >> $GITHUB_OUTPUT
+              echo "" >> $GITHUB_OUTPUT
+              # 只提取最新版本的变更（第一个 ## 标题到第二个 ## 标题之间的内容）
+              CHANGELOG_CONTENT=$(awk '/^## /{if (p) exit; p=1; next} p' "${dir}CHANGELOG.md")
+              if [ -z "$CHANGELOG_CONTENT" ]; then
+                CHANGELOG_CONTENT=$(cat "${dir}CHANGELOG.md")
+              fi
+              echo "$CHANGELOG_CONTENT" >> $GITHUB_OUTPUT
+              echo "" >> $GITHUB_OUTPUT
+            fi
+          done
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: 创建 Release
