@@ -4,12 +4,18 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version (leave empty for auto date-based)'
+        description: '版本号 (留空则用日期自动生成)'
         required: false
         default: ''
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
 
 jobs:
-  release:
+  build-and-release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,48 +24,125 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install dependencies
-        run: cd lxmusic-plugin && npm install
-
-      - name: Build plugin
-        run: |
-          cd lxmusic-plugin
-          npm run build
-          ./../build-plugin.sh .
-
-      - name: Generate version
+      - name: 生成版本号
         id: version
         run: |
           if [ -n "${{ github.event.inputs.version }}" ]; then
-            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+            VERSION="${{ github.event.inputs.version }}"
+          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
           else
-            echo "version=$(date +'%Y.%m.%d')" >> $GITHUB_OUTPUT
+            VERSION="$(date +'%Y.%m.%d')"
           fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "版本号: $VERSION"
 
-      - name: Update plugin.json version
+      - name: 安装依赖并编译
         run: |
           cd lxmusic-plugin
-          VERSION="${{ steps.version.outputs.version }}"
-          sed -i "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" plugin.json
-          sed -i "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" dist/plugin.json
+          npm install
+          npm run build
 
-      - name: Read hashes
+      - name: 计算哈希、打包、生成 plugin.json
         id: hashes
         run: |
-          cd lxmusic-plugin/dist
-          echo "entry_hash=$(grep -o '"entryHash": "[^"]*"' plugin.json | cut -d'"' -f4)" >> $GITHUB_OUTPUT
-          echo "zip_hash=$(grep -o '"zipHash": "[^"]*"' plugin.json | cut -d'"' -f4)" >> $GITHUB_OUTPUT
+          cd lxmusic-plugin
+          node -e "
+            const fs = require('fs');
+            const crypto = require('crypto');
+            const VERSION = '${{ steps.version.outputs.version }}';
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
+            // 读取源 plugin.json
+            const plugin = JSON.parse(fs.readFileSync('plugin.json', 'utf8'));
+            plugin.version = VERSION;
+
+            // 计算 entryHash (dist/main.js 的 MD5)
+            const mainJs = fs.readFileSync('dist/main.js');
+            plugin.entryHash = crypto.createHash('md5').update(mainJs).digest('hex');
+            console.log('entryHash:', plugin.entryHash);
+
+            // 第一轮打包: plugin.json 含 entryHash 但不含 zipHash
+            fs.writeFileSync('dist/plugin.json', JSON.stringify(plugin, null, 2) + '\n');
+          "
+
+          # 第一轮打包
+          cd dist && rm -f lxmusic-plugin.jsplugin.zip lxmusic.jsplugin.zip
+          zip -r lxmusic-plugin.jsplugin.zip . -x '*.jsplugin.zip'
+          cd ..
+
+          # 计算 zipHash
+          node -e "
+            const fs = require('fs');
+            const crypto = require('crypto');
+            const zip = fs.readFileSync('dist/lxmusic-plugin.jsplugin.zip');
+            const zipHash = crypto.createHash('md5').update(zip).digest('hex');
+            const plugin = JSON.parse(fs.readFileSync('dist/plugin.json', 'utf8'));
+            plugin.zipHash = zipHash;
+            fs.writeFileSync('dist/plugin.json', JSON.stringify(plugin, null, 2) + '\n');
+            fs.writeFileSync('plugin.json', JSON.stringify(plugin, null, 2) + '\n');
+            console.log('zipHash:', zipHash);
+          "
+
+          # 第二轮打包 (含 zipHash 的最终版)
+          cd dist && rm -f lxmusic-plugin.jsplugin.zip
+          zip -r lxmusic-plugin.jsplugin.zip . -x '*.jsplugin.zip'
+          cd ..
+
+          # 输出哈希
+          echo "entry_hash=$(node -e "console.log(JSON.parse(require('fs').readFileSync('plugin.json','utf8')).entryHash)")" >> $GITHUB_OUTPUT
+          echo "zip_hash=$(node -e "console.log(JSON.parse(require('fs').readFileSync('plugin.json','utf8')).zipHash)")" >> $GITHUB_OUTPUT
+
+      - name: 显示产物信息
+        run: |
+          echo "### 最终产物"
+          echo "| 字段 | 值 |"
+          echo "|------|-----|"
+          echo "| version | ${{ steps.version.outputs.version }} |"
+          echo "| entryHash | ${{ steps.hashes.outputs.entry_hash }} |"
+          echo "| zipHash | ${{ steps.hashes.outputs.zip_hash }} |"
+          echo ""
+          echo "### ZIP 内容"
+          unzip -l lxmusic-plugin/dist/lxmusic-plugin.jsplugin.zip
+
+      - name: 提交 plugin.json 更新
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add lxmusic-plugin/plugin.json
+          git diff --staged --quiet || git commit -m "chore: update plugin.json for v${{ steps.version.outputs.version }}"
+          git push
+
+      - name: 上传产物 (Artifact)
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: ${{ steps.version.outputs.version }}
-          name: lxmusic-plugin ${{ steps.version.outputs.version }}
+          name: lxmusic-plugin
+          path: lxmusic-plugin/dist/lxmusic-plugin.jsplugin.zip
+
+      - name: 创建 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: lxmusic-plugin v${{ steps.version.outputs.version }}
           files: lxmusic-plugin/dist/lxmusic-plugin.jsplugin.zip
           body: |
-            ## lxmusic plugin ${{ steps.version.outputs.version }}
+            ## lxmusic plugin v${{ steps.version.outputs.version }}
 
-            - entryHash: ${{ steps.hashes.outputs.entry_hash }}
-            - zipHash: ${{ steps.hashes.outputs.zip_hash }}
+            ### 安装方式
+
+            在 Songloft 中通过 URL 安装，或下载 `lxmusic-plugin.jsplugin.zip` 手动导入。
+
+            ### 哈希信息
+
+            | 字段 | 值 |
+            |------|-----|
+            | version | `${{ steps.version.outputs.version }}` |
+            | entryHash | `${{ steps.hashes.outputs.entry_hash }}` |
+            | zipHash | `${{ steps.hashes.outputs.zip_hash }}` |
+
+            ### 下载直链
+
+            ```
+            https://github.com/moonbai/songloft-plugins/releases/download/v${{ steps.version.outputs.version }}/lxmusic-plugin.jsplugin.zip
+            ```
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
