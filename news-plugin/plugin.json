@@ -1,6 +1,6 @@
 {
   "name": "新闻资讯",
-  "version": "1.0.11",
+  "version": "1.2.0",
   "entryPath": "news",
   "main": "main.jsc",
   "minHostVersion": "1.0.0",
@@ -15,7 +15,7 @@
   "author": "Mars",
   "homepage": "https://github.com/moonbai/songloft-plugins",
   "updateUrl": "https://github.com/moonbai/songloft-plugins/raw/main/news-plugin/plugin.json",
-  "download_url": "https://github.com/moonbai/songloft-plugins/releases/download/v1.0.11/news.jsplugin.zip",
-  "entryHash": "0ca43b2f4aa7a4d7ed486c835683f94801d31a50b474852f398c3fb935c539f7",
-  "zipHash": "bde4ca7243fa123c55f17b017161603970108c507ad3e2ef32378e2f7720d7e7"
+  "download_url": "https://github.com/moonbai/songloft-plugins/releases/download/v1.2.0/news.jsplugin.zip",
+  "entryHash": "9eb7b2bad98f8f0efbe7374168326cc4ff6ed457ac364584b3e1bc569b3ed9a6",
+  "zipHash": "b07e48f5c6bae832ec19b91fcff629da30ac746bb19e518c3c473dd061e8248a"
 }

@@ -3,6 +3,30 @@ import { sources, platformModules } from '../newsSdk/facade';
 import { successResponse, errorResponse, badRequestResponse, parseJsonBody } from './response';
 import type { NewsItem } from '../types';
 
+const HOTBOARD_SOURCES = ['baidu', 'zhihu', 'wangyi'];
+
+async function loadHotboardNews(sourceId: string, limit: number): Promise<NewsItem[]> {
+  const module = platformModules[sourceId];
+  if (!module?.hotboard) return [];
+  try {
+    const boards = await module.hotboard.boards();
+    if (boards.length === 0) return [];
+    const result = await module.hotboard.list(boards[0].id, 1, limit);
+    return result.news;
+  } catch {
+    return [];
+  }
+}
+
+function filterByKeyword(items: NewsItem[], keyword: string): NewsItem[] {
+  const kw = keyword.toLowerCase();
+  return items.filter(item =>
+    (item.title && item.title.toLowerCase().includes(kw)) ||
+    (item.summary && item.summary.toLowerCase().includes(kw)) ||
+    (item.author && item.author.toLowerCase().includes(kw))
+  );
+}
+
 export function createSearchHandlers() {
   return {
     async search(req: unknown) {
@@ -24,42 +48,32 @@ export function createSearchHandlers() {
           page = Number(params.page) || 1;
           page_size = Number(params.page_size) || 20;
         }
-        
+
         if (!keyword) return badRequestResponse('Keyword is required');
-        
-        // 如果是 all，则并行查询所有平台
-        if (source_id === 'all') {
-          const promises = sources
-            .filter(s => platformModules[s.id])
-            .map(async (s) => {
-              try {
-                const result = await platformModules[s.id].newsSearch.search(keyword, 1, 5);
-                return result.news;
-              } catch (e) {
-                return [];
-              }
-            });
-          
-          const results = await Promise.all(promises);
-          const allNews: NewsItem[] = [];
-          for (const arr of results) {
-            allNews.push(...arr);
-          }
-          
-          return successResponse({
-            results: allNews.slice(0, page_size),
-            total: allNews.length,
-          });
+
+        const sourceIds = source_id === 'all'
+          ? HOTBOARD_SOURCES.filter(s => platformModules[s])
+          : [source_id].filter(s => platformModules[s]);
+
+        const promises = sourceIds.map(async (sid) => {
+          const news = await loadHotboardNews(sid, 50);
+          return filterByKeyword(news, keyword);
+        });
+
+        const results = await Promise.all(promises);
+        const allNews: NewsItem[] = [];
+        for (const arr of results) {
+          allNews.push(...arr);
         }
-        
-        const module = platformModules[source_id];
-        if (!module) return badRequestResponse('Unknown source');
-        
-        const result = await module.newsSearch.search(keyword, page, page_size);
-        
+
+        allNews.sort((a, b) => (b.hot || 0) - (a.hot || 0));
+
+        const start = (page - 1) * page_size;
+        const pageData = allNews.slice(start, start + page_size);
+
         return successResponse({
-          results: result.news,
-          total: result.total,
+          results: pageData,
+          total: allNews.length,
         });
       } catch (e) {
         return errorResponse('Search failed: ' + (e as Error).message);
