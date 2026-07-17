@@ -48,26 +48,28 @@ function setupRouter(): void {
   router.post('/api/player/tts-config', playerHandlers.setTtsConfig);
   router.get('/api/player/playable', playerHandlers.getPlayableNews);
 
-  // 聚合接口 - 同时获取多个源的热榜
+  // 聚合接口 - 单数据源验证
   router.get('/api/aggregate/hotboard', async (req) => {
     try {
       const limit = Number(req.query.limit) || 10;
-      const platforms = ['baidu', 'zhihu', 'wangyi'];
-      const promises = platforms.map(async (source) => {
-        try {
-          const module = platformModules[source];
-          if (!module?.hotboard) return { source, news: [] };
-          const boards = await module.hotboard.boards();
-          if (boards.length === 0) return { source, news: [] };
-          const result = await module.hotboard.list(boards[0].id, 1, limit);
-          return { source, news: result.news };
-        } catch (e) {
-          return { source, news: [], error: String(e) };
-        }
-      });
-      const results = await Promise.all(promises);
-      return jsonResponse({ code: 0, msg: 'success', data: results });
+      const source = 'baidu';
+      songloft.log.info('aggregate/hotboard: fetching baidu...');
+      const module = platformModules[source];
+      if (!module?.hotboard) {
+        songloft.log.error('aggregate/hotboard: baidu module or hotboard not found');
+        return jsonResponse({ code: 0, msg: 'success', data: [{ source, news: [] }] });
+      }
+      const boards = await module.hotboard.boards();
+      songloft.log.info('aggregate/hotboard: boards=' + JSON.stringify(boards));
+      if (boards.length === 0) {
+        songloft.log.error('aggregate/hotboard: no boards returned');
+        return jsonResponse({ code: 0, msg: 'success', data: [{ source, news: [] }] });
+      }
+      const result = await module.hotboard.list(boards[0].id, 1, limit);
+      songloft.log.info('aggregate/hotboard: news count=' + (result.news?.length || 0));
+      return jsonResponse({ code: 0, msg: 'success', data: [{ source, news: result.news }] });
     } catch (e) {
+      songloft.log.error('aggregate/hotboard error:', e);
       return jsonResponse({ code: 500, msg: 'Failed: ' + (e as Error).message }, 500);
     }
   });

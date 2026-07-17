@@ -20,12 +20,18 @@ function normalizeItem(item: any): NewsItem {
 const newsList = {
   async list(category: string, page: number, limit: number): Promise<NewsListResult> {
     const url = `https://top.baidu.com/board?tab=${encodeURIComponent(category || 'realtime')}`;
+    songloft.log.info('baidu: fetching ' + url);
     const resp = await httpFetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0' },
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
     });
     const raw = resp.raw || String(resp.body || '');
+    songloft.log.info('baidu: resp status=' + resp.statusCode + ' raw length=' + raw.length);
+    songloft.log.info('baidu: raw preview=' + raw.substring(0, 200));
     const contentMatch = raw.match(/<!--s-data:({.+?})-->/);
-    if (!contentMatch) return { news: [] };
+    if (!contentMatch) {
+      songloft.log.error('baidu: no s-data match found');
+      return { news: [] };
+    }
     let data: any;
     try {
       data = JSON.parse(contentMatch[1]);
