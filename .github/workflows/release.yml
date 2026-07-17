@@ -161,12 +161,15 @@ jobs:
           # 遍历所有 release-* artifact 目录
           for dir in artifacts/release-*/; do
             [ -d "$dir" ] || continue
-            # 找到 zip 文件
-            find "$dir" -name '*.jsplugin.zip' -exec cp {} release-assets/ \;
-            # 找到 plugin.json (保留插件名前缀)
-            PLUGIN_DIR=$(find "$dir" -name plugin.json -exec dirname {} \; | head -1)
-            PLUGIN_NAME=$(basename "$PLUGIN_DIR")
-            cp "$PLUGIN_DIR/plugin.json" "release-assets/${PLUGIN_NAME}.plugin.json"
+            # 找到 plugin.json
+            PJ=$(find "$dir" -name plugin.json | head -1)
+            [ -z "$PJ" ] && continue
+            # 从 plugin.json 的 entryPath 或 name 字段获取插件名
+            PLUGIN_NAME=$(node -e "const p=JSON.parse(require('fs').readFileSync('$PJ','utf8'));console.log(p.entryPath||p.name||'unknown')")
+            echo "插件: $PLUGIN_NAME (from $PJ)"
+            # 复制 zip 和 plugin.json
+            find "$dir" -name '*.jsplugin.zip' -exec cp {} "release-assets/${PLUGIN_NAME}.jsplugin.zip" \;
+            cp "$PJ" "release-assets/${PLUGIN_NAME}.plugin.json"
           done
           echo "### Release 资产:"
           ls -la release-assets/
