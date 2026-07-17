@@ -40,7 +40,6 @@ jobs:
       - name: 发现插件目录
         id: find
         run: |
-          # 查找所有含 plugin.json 的目录（仅顶层一级目录，排除 node_modules / dist / .git / artifacts 等）
           PLUGINS=$(find . -maxdepth 2 -name plugin.json -not -path '*/node_modules/*' -not -path '*/dist/*' -not -path '*/.git/*' -not -path '*/artifacts/*' -not -path '*/release-assets/*' -exec dirname {} \; | sed 's|^\./||' | sort | jq -R . | jq -sc .)
           echo "plugins=$PLUGINS" >> $GITHUB_OUTPUT
           echo "发现的插件: $PLUGINS"
@@ -59,87 +58,45 @@ jobs:
         with:
           node-version: '20'
 
-      - name: 安装依赖并编译
+      - name: 安装依赖
+        run: cd ${{ matrix.plugin }} && npm install
+
+      - name: 更新版本号
         run: |
           cd ${{ matrix.plugin }}
-          npm install
-          npm run build
+          node -e "
+            const fs = require('fs');
+            const p = JSON.parse(fs.readFileSync('plugin.json','utf8'));
+            p.version = '${{ needs.discover.outputs.version }}';
+            fs.writeFileSync('plugin.json', JSON.stringify(p, null, 2) + '\n');
+          "
 
-      - name: 计算哈希、打包、生成 plugin.json
-        id: hashes
+      - name: 构建 (songloft-plugin-builder 自动计算哈希)
+        id: build
         run: |
-          PLUGIN_DIR="${{ matrix.plugin }}"
-          PLUGIN_NAME=$(basename "$PLUGIN_DIR")
-          cd "$PLUGIN_DIR"
-
-          node -e "
-            const fs = require('fs');
-            const crypto = require('crypto');
-            const VERSION = '${{ needs.discover.outputs.version }}';
-
-            const plugin = JSON.parse(fs.readFileSync('plugin.json', 'utf8'));
-            plugin.version = VERSION;
-
-            // entryHash = dist/main.js 的 SHA-256 (64 字符小写 hex)
-            const mainJs = fs.readFileSync('dist/main.js');
-            plugin.entryHash = crypto.createHash('sha256').update(mainJs).digest('hex');
-            console.log('entryHash:', plugin.entryHash);
-
-            // 第一轮打包 (含 entryHash, 不含 zipHash)
-            fs.writeFileSync('dist/plugin.json', JSON.stringify(plugin, null, 2) + '\n');
-          "
-
-          # 第一轮打包
-          cd dist && rm -f *.jsplugin.zip
-          zip -r "$PLUGIN_NAME.jsplugin.zip" . -x '*.jsplugin.zip'
-          cd ..
-
-          # 计算 zipHash 并写入
-          node -e "
-            const fs = require('fs');
-            const crypto = require('crypto');
-            const zip = fs.readFileSync('dist/$PLUGIN_NAME.jsplugin.zip');
-            const zipHash = crypto.createHash('sha256').update(zip).digest('hex');
-            const plugin = JSON.parse(fs.readFileSync('dist/plugin.json', 'utf8'));
-            plugin.zipHash = zipHash;
-            fs.writeFileSync('dist/plugin.json', JSON.stringify(plugin, null, 2) + '\n');
-            fs.writeFileSync('plugin.json', JSON.stringify(plugin, null, 2) + '\n');
-            console.log('zipHash:', zipHash);
-          "
-
-          # 第二轮打包 (含 zipHash 的最终版)
-          cd dist && rm -f "$PLUGIN_NAME.jsplugin.zip"
-          zip -r "$PLUGIN_NAME.jsplugin.zip" . -x '*.jsplugin.zip'
-          cd ..
-
-          # 输出
-          echo "entry_hash=$(node -e "console.log(JSON.parse(require('fs').readFileSync('plugin.json','utf8')).entryHash)")" >> $GITHUB_OUTPUT
-          echo "zip_hash=$(node -e "console.log(JSON.parse(require('fs').readFileSync('plugin.json','utf8')).zipHash)")" >> $GITHUB_OUTPUT
+          cd ${{ matrix.plugin }}
+          npx @songloft/plugin-builder build 2>&1 | tee build.log
+          # 提取哈希
+          ENTRY_HASH=$(grep 'entryHash:' build.log | awk '{print $2}')
+          ZIP_HASH=$(grep 'zipHash:' build.log | awk '{print $2}')
+          PLUGIN_NAME=$(node -e "console.log(JSON.parse(require('fs').readFileSync('plugin.json','utf8')).entryPath||require('fs').readdirSync('dist').find(f=>f.endsWith('.jsplugin.zip'))?.replace('.jsplugin.zip','')||'plugin')")
+          echo "entry_hash=$ENTRY_HASH" >> $GITHUB_OUTPUT
+          echo "zip_hash=$ZIP_HASH" >> $GITHUB_OUTPUT
           echo "plugin_name=$PLUGIN_NAME" >> $GITHUB_OUTPUT
-          echo "plugin_dir=$PLUGIN_DIR" >> $GITHUB_OUTPUT
 
-      - name: 显示产物信息
+      - name: 验证
         run: |
-          echo "### ${{ steps.hashes.outputs.plugin_name }}"
-          echo "| 字段 | 值 |"
-          echo "|------|-----|"
-          echo "| version | ${{ needs.discover.outputs.version }} |"
-          echo "| entryHash | ${{ steps.hashes.outputs.entry_hash }} |"
-          echo "| zipHash | ${{ steps.hashes.outputs.zip_hash }} |"
+          cd ${{ matrix.plugin }}
+          ZIP_FILE=$(ls dist/*.jsplugin.zip | head -1)
+          npx @songloft/plugin-builder validate "$ZIP_FILE"
 
-      - name: 上传产物 (Artifact)
+      - name: 暂存产物
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.hashes.outputs.plugin_name }}
-          path: ${{ matrix.plugin }}/dist/${{ steps.hashes.outputs.plugin_name }}.jsplugin.zip
-
-      - name: 暂存 plugin.json 和 zip 供 release 使用
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-${{ steps.hashes.outputs.plugin_name }}
+          name: release-${{ steps.build.outputs.plugin_name }}
           path: |
+            ${{ matrix.plugin }}/dist/*.jsplugin.zip
             ${{ matrix.plugin }}/plugin.json
-            ${{ matrix.plugin }}/dist/${{ steps.hashes.outputs.plugin_name }}.jsplugin.zip
 
   # 第三步:汇总发布 Release
   release:
@@ -152,45 +109,36 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           pattern: release-*
-          merge-multiple: false
           path: artifacts
 
-      - name: 收集所有 zip 和 plugin.json
+      - name: 收集 zip 和 plugin.json
+        id: collect
         run: |
           mkdir -p release-assets
-          # 遍历所有 release-* artifact 目录
           for dir in artifacts/release-*/; do
             [ -d "$dir" ] || continue
-            # 找到 plugin.json
+            find "$dir" -name '*.jsplugin.zip' -exec cp {} release-assets/ \;
             PJ=$(find "$dir" -name plugin.json | head -1)
             [ -z "$PJ" ] && continue
-            # 从 plugin.json 的 entryPath 或 name 字段获取插件名
             PLUGIN_NAME=$(node -e "const p=JSON.parse(require('fs').readFileSync('$PJ','utf8'));console.log(p.entryPath||p.name||'unknown')")
-            echo "插件: $PLUGIN_NAME (from $PJ)"
-            # 复制 zip 和 plugin.json
-            find "$dir" -name '*.jsplugin.zip' -exec cp {} "release-assets/${PLUGIN_NAME}.jsplugin.zip" \;
             cp "$PJ" "release-assets/${PLUGIN_NAME}.plugin.json"
           done
           echo "### Release 资产:"
           ls -la release-assets/
 
-      - name: 回写所有 plugin.json
+      - name: 回写 plugin.json
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          # 遍历所有 plugin.json,复制回对应插件目录
           for f in release-assets/*.plugin.json; do
             [ -f "$f" ] || continue
             PLUGIN_NAME=$(basename "$f" .plugin.json)
-            # 找到对应的插件目录 (含 plugin.json 且目录名匹配)
-            PLUGIN_DIR=$(find . -maxdepth 2 -name plugin.json -not -path '*/node_modules/*' -not -path '*/dist/*' -not -path '*/.git/*' -exec dirname {} \; | grep "/${PLUGIN_NAME}$" | head -1)
+            PLUGIN_DIR=$(find . -maxdepth 2 -name plugin.json -not -path '*/node_modules/*' -not -path '*/dist/*' -not -path '*/.git/*' -exec dirname {} \; | grep -E "/${PLUGIN_NAME}(-plugin)?$" | head -1)
             if [ -n "$PLUGIN_DIR" ]; then
               cp "$f" "$PLUGIN_DIR/plugin.json"
               git add "$PLUGIN_DIR/plugin.json"
             fi
           done
-
           git diff --staged --quiet || git commit -m "chore: update plugin.json for v${{ needs.discover.outputs.version }}"
           git push
 
@@ -211,9 +159,10 @@ jobs:
           for f in release-assets/*.plugin.json; do
             [ -f "$f" ] || continue
             PLUGIN_NAME=$(basename "$f" .plugin.json)
-            ENTRY_HASH=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$f','utf8')).entryHash || '')")
-            ZIP_HASH=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$f','utf8')).zipHash || '')")
-            ZIP_FILE=$(find release-assets -name "${PLUGIN_NAME}.jsplugin.zip" -exec basename {} \;)
+            ENTRY_HASH=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$f','utf8')).entryHash||'')")
+            ZIP_HASH=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$f','utf8')).zipHash||'')")
+            ZIP_FILE=$(ls release-assets/${PLUGIN_NAME}*.jsplugin.zip 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "")
+            [ -z "$ZIP_FILE" ] && ZIP_FILE=$(ls release-assets/*.jsplugin.zip 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "")
             echo "| $PLUGIN_NAME | \`$ENTRY_HASH\` | \`$ZIP_HASH\` | [$ZIP_FILE](https://github.com/moonbai/songloft-plugins/releases/download/v${{ needs.discover.outputs.version }}/$ZIP_FILE) |" >> $GITHUB_OUTPUT
           done
           echo "EOF" >> $GITHUB_OUTPUT
