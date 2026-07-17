@@ -83,14 +83,22 @@ jobs:
       - name: 安装依赖
         run: cd ${{ matrix.plugin }} && npm install
 
-      - name: 更新版本号
+      - name: 更新版本号和在线更新地址
         run: |
           cd ${{ matrix.plugin }}
+          REPO_URL="https://github.com/moonbai/songloft-plugins"
+          VERSION="${{ needs.discover.outputs.version }}"
+          PLUGIN_ENTRY=$(node -e "console.log(JSON.parse(require('fs').readFileSync('plugin.json','utf8')).entryPath||'plugin')")
           node -e "
             const fs = require('fs');
             const p = JSON.parse(fs.readFileSync('plugin.json','utf8'));
-            p.version = '${{ needs.discover.outputs.version }}';
+            p.version = '${VERSION}';
+            // 在线更新地址
+            p.updateUrl = '${REPO_URL}/raw/main/${{ matrix.plugin }}/plugin.json';
+            p.download_url = '${REPO_URL}/releases/download/v${VERSION}/' + p.entryPath + '.jsplugin.zip';
             fs.writeFileSync('plugin.json', JSON.stringify(p, null, 2) + '\n');
+            console.log('已设置 updateUrl: ' + p.updateUrl);
+            console.log('已设置 download_url: ' + p.download_url);
           "
 
       - name: 构建 (songloft-plugin build)

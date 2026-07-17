@@ -110,7 +110,7 @@ function initRouter() {
   }
 };
 
-;(globalThis as any).onHTTPRequest = function (req: unknown) {
+;(globalThis as any).onHTTPRequest = async function (req: unknown) {
   try {
     const request = req as Record<string, unknown>;
     const method = String(request.method || 'GET').toUpperCase();
@@ -122,7 +122,7 @@ function initRouter() {
     
     // 将清理后的 path 传给路由
     const routedReq = { ...request, path };
-    const result = router.handle(routedReq);
+    const result = await router.handle(routedReq);
     
     if (result) {
       return result;

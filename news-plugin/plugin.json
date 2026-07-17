@@ -10,6 +10,8 @@
   ],
   "description": "新闻资讯聚合 - 多平台新闻与音频播放",
   "author": "Mars",
-  "entryHash": "ec59f60f5c0ba46e944cc526d5d157477986ad20ca74b01302f04419514ab7d5",
-  "zipHash": "596b1bbafae27b1ad32c77465b5c1fffb3ed03430cd379e52b710b2bf0fcb4e2"
+  "updateUrl": "https://github.com/moonbai/songloft-plugins/raw/main/news-plugin/plugin.json",
+  "download_url": "https://github.com/moonbai/songloft-plugins/releases/download/v1.0.4/news.jsplugin.zip",
+  "entryHash": "7b6d6cedc9cd7e5956d2288cc099a4894e7c1528e5c8be9c4e3b6032c2ba1e13",
+  "zipHash": "a0de15ae29bbc45299e1f4cdffb8493e92f824b8f4553a4b6b5cee9cd245d1e0"
 }

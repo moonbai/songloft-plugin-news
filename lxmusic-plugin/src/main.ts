@@ -410,14 +410,20 @@ function initRouter(): void {
   }
 };
 
-;(globalThis as any).onHTTPRequest = function (req: unknown): HTTPResponse | Promise<HTTPResponse> {
+;(globalThis as any).onHTTPRequest = async function (req: unknown): Promise<HTTPResponse> {
   // ⚠️ 必须永远返回合法 HTTPResponse,不能返回 undefined
   try {
     if (!router) {
       return jsonResponse({ code: 503, msg: 'Plugin not initialized', data: null }, 503);
     }
 
-    const result = router.handle(req);
+    // 去掉 query string
+    const r = req as Record<string, unknown>;
+    const fullPath = String(r.path || '');
+    const path = fullPath.split('?')[0];
+    const routedReq = { ...r, path };
+
+    const result = await router.handle(routedReq);
 
     if (result) {
       return result;
