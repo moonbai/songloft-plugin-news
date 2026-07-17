@@ -10,8 +10,7 @@
     "songs.write",
     "playlists.read",
     "playlists.write",
-    "jsenv",
-    "http_request"
+    "jsenv"
   ],
   "description": "LX Music Source Plugin - 多平台音乐搜索与播放",
   "author": "hanxi",

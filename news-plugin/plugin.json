@@ -4,7 +4,7 @@
   "entryPath": "news",
   "main": "main.js",
   "minHostVersion": "1.0.0",
-  "permissions": ["storage", "http_request", "jsenv"],
+  "permissions": ["storage", "jsenv"],
   "description": "新闻资讯聚合 - 多平台新闻与音频播放",
   "author": "moonbai"
 }
