@@ -13,7 +13,8 @@
     "declaration": false,
     "sourceMap": false,
     "noImplicitAny": false,
-    "moduleResolution": "bundler"
+    "moduleResolution": "bundler",
+    "types": ["@songloft/plugin-sdk"]
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]

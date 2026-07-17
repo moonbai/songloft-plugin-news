@@ -2,7 +2,7 @@
   "name": "lxmusic",
   "version": "2026.07.17",
   "entryPath": "lxmusic",
-  "main": "main.js",
+  "main": "main.jsc",
   "minHostVersion": "1.0.0",
   "permissions": [
     "storage",
@@ -14,6 +14,6 @@
   ],
   "description": "LX Music Source Plugin - 多平台音乐搜索与播放",
   "author": "hanxi",
-  "entryHash": "7fba2860ae9f514f2b73f6c332197ec1",
-  "zipHash": "6842a24d34632a55aadb8431708ece69"
+  "entryHash": "7189c487ec5c102dc7acbfa9ecd9edf2f317b6fb984f76e84d5a49f814ee4ed5",
+  "zipHash": "f9030c93a064371f2e276bd264d96de7f52efbcc4b1b9730783ee72935d1b33b"
 }

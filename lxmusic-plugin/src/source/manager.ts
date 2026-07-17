@@ -51,8 +51,8 @@ export class SourceManager {
     let id = baseSlug;
     let suffix = 2;
     while (this.sources.has(id)) {
-      // 同名先删旧
-      await this.delete(id);
+      id = `${baseSlug}_${suffix}`;
+      suffix++;
     }
 
     const source: ImportedSource = {

@@ -4,7 +4,7 @@
   "description": "LX Music Source Plugin for Songloft - 多平台音乐搜索与播放",
   "scripts": {
     "build": "songloft-plugin build",
-    "validate": "songloft-plugin validate dist/*.jsplugin.zip",
+    "validate": "songloft-plugin validate",
     "dev": "songloft-plugin dev"
   },
   "devDependencies": {
