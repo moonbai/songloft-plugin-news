@@ -1,0 +1,16 @@
+{
+  "name": "news",
+  "version": "2026.07.17",
+  "entryPath": "news",
+  "main": "main.js",
+  "minHostVersion": "1.0.0",
+  "permissions": [
+    "storage",
+    "http_request",
+    "jsenv"
+  ],
+  "description": "新闻资讯聚合 - 多平台新闻与音频播放",
+  "author": "moonbai",
+  "entryHash": "837ec2eaba42535ad3667238fa9a1b2c",
+  "zipHash": "2dc4529eadf76090995afda39efac62f"
+}
