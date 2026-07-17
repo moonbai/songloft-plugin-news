@@ -4,3 +4,5 @@ node_modules/
 
 # 构建产物不入库，由 GitHub Actions 自动构建
 dist/
+artifacts/
+release-assets/

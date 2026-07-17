@@ -40,8 +40,8 @@ jobs:
       - name: 发现插件目录
         id: find
         run: |
-          # 查找所有含 plugin.json 的目录（排除 node_modules / dist / .git）
-          PLUGINS=$(find . -name plugin.json -not -path '*/node_modules/*' -not -path '*/dist/*' -not -path '*/.git/*' -exec dirname {} \; | sed 's|^\./||' | sort | jq -R . | jq -sc .)
+          # 查找所有含 plugin.json 的目录（仅顶层一级目录，排除 node_modules / dist / .git / artifacts 等）
+          PLUGINS=$(find . -maxdepth 2 -name plugin.json -not -path '*/node_modules/*' -not -path '*/dist/*' -not -path '*/.git/*' -not -path '*/artifacts/*' -not -path '*/release-assets/*' -exec dirname {} \; | sed 's|^\./||' | sort | jq -R . | jq -sc .)
           echo "plugins=$PLUGINS" >> $GITHUB_OUTPUT
           echo "发现的插件: $PLUGINS"
 
