@@ -64,12 +64,6 @@ jobs:
       - name: 安装依赖
         run: cd ${{ matrix.plugin }} && npm install
 
-      - name: 修复 plugin-builder 静态资源路径 bug
-        run: |
-          cd ${{ matrix.plugin }}
-          sed -i 's|static/js/app.bundle.js|js/app.bundle.js|g' node_modules/@songloft/plugin-builder/dist/index.js
-          sed -i 's|static/js/app.bundle.js|js/app.bundle.js|g' node_modules/@songloft/plugin-builder/dist/cli.js
-
       - name: 更新版本号
         run: |
           cd ${{ matrix.plugin }}
