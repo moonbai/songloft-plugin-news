@@ -1,4 +1,4 @@
-name: Release Plugin
+name: Release Plugins
 
 on:
   workflow_dispatch:
@@ -15,14 +15,14 @@ permissions:
   contents: write
 
 jobs:
-  build-and-release:
+  # 第一步:发现所有插件目录
+  discover:
     runs-on: ubuntu-latest
+    outputs:
+      plugins: ${{ steps.find.outputs.plugins }}
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
 
       - name: 生成版本号
         id: version
@@ -37,44 +37,68 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "版本号: $VERSION"
 
+      - name: 发现插件目录
+        id: find
+        run: |
+          # 查找所有含 plugin.json 的目录（排除 node_modules / dist / .git）
+          PLUGINS=$(find . -name plugin.json -not -path '*/node_modules/*' -not -path '*/dist/*' -not -path '*/.git/*' -exec dirname {} \; | sed 's|^\./||' | sort | jq -R . | jq -sc .)
+          echo "plugins=$PLUGINS" >> $GITHUB_OUTPUT
+          echo "发现的插件: $PLUGINS"
+
+  # 第二步:并行构建所有插件
+  build:
+    needs: discover
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        plugin: ${{ fromJson(needs.discover.outputs.plugins) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
       - name: 安装依赖并编译
         run: |
-          cd lxmusic-plugin
+          cd ${{ matrix.plugin }}
           npm install
           npm run build
 
       - name: 计算哈希、打包、生成 plugin.json
         id: hashes
         run: |
-          cd lxmusic-plugin
+          PLUGIN_DIR="${{ matrix.plugin }}"
+          PLUGIN_NAME=$(basename "$PLUGIN_DIR")
+          cd "$PLUGIN_DIR"
+
           node -e "
             const fs = require('fs');
             const crypto = require('crypto');
-            const VERSION = '${{ steps.version.outputs.version }}';
+            const VERSION = '${{ needs.discover.outputs.version }}';
 
-            // 读取源 plugin.json
             const plugin = JSON.parse(fs.readFileSync('plugin.json', 'utf8'));
             plugin.version = VERSION;
 
-            // 计算 entryHash (dist/main.js 的 MD5)
+            // entryHash = dist/main.js 的 MD5
             const mainJs = fs.readFileSync('dist/main.js');
             plugin.entryHash = crypto.createHash('md5').update(mainJs).digest('hex');
             console.log('entryHash:', plugin.entryHash);
 
-            // 第一轮打包: plugin.json 含 entryHash 但不含 zipHash
+            // 第一轮打包 (含 entryHash, 不含 zipHash)
             fs.writeFileSync('dist/plugin.json', JSON.stringify(plugin, null, 2) + '\n');
           "
 
           # 第一轮打包
-          cd dist && rm -f lxmusic-plugin.jsplugin.zip lxmusic.jsplugin.zip
-          zip -r lxmusic-plugin.jsplugin.zip . -x '*.jsplugin.zip'
+          cd dist && rm -f *.jsplugin.zip
+          zip -r "$PLUGIN_NAME.jsplugin.zip" . -x '*.jsplugin.zip'
           cd ..
 
-          # 计算 zipHash
+          # 计算 zipHash 并写入
           node -e "
             const fs = require('fs');
             const crypto = require('crypto');
-            const zip = fs.readFileSync('dist/lxmusic-plugin.jsplugin.zip');
+            const zip = fs.readFileSync('dist/$PLUGIN_NAME.jsplugin.zip');
             const zipHash = crypto.createHash('md5').update(zip).digest('hex');
             const plugin = JSON.parse(fs.readFileSync('dist/plugin.json', 'utf8'));
             plugin.zipHash = zipHash;
@@ -84,65 +108,119 @@ jobs:
           "
 
           # 第二轮打包 (含 zipHash 的最终版)
-          cd dist && rm -f lxmusic-plugin.jsplugin.zip
-          zip -r lxmusic-plugin.jsplugin.zip . -x '*.jsplugin.zip'
+          cd dist && rm -f "$PLUGIN_NAME.jsplugin.zip"
+          zip -r "$PLUGIN_NAME.jsplugin.zip" . -x '*.jsplugin.zip'
           cd ..
 
-          # 输出哈希
+          # 输出
           echo "entry_hash=$(node -e "console.log(JSON.parse(require('fs').readFileSync('plugin.json','utf8')).entryHash)")" >> $GITHUB_OUTPUT
           echo "zip_hash=$(node -e "console.log(JSON.parse(require('fs').readFileSync('plugin.json','utf8')).zipHash)")" >> $GITHUB_OUTPUT
+          echo "plugin_name=$PLUGIN_NAME" >> $GITHUB_OUTPUT
+          echo "plugin_dir=$PLUGIN_DIR" >> $GITHUB_OUTPUT
 
       - name: 显示产物信息
         run: |
-          echo "### 最终产物"
+          echo "### ${{ steps.hashes.outputs.plugin_name }}"
           echo "| 字段 | 值 |"
           echo "|------|-----|"
-          echo "| version | ${{ steps.version.outputs.version }} |"
+          echo "| version | ${{ needs.discover.outputs.version }} |"
           echo "| entryHash | ${{ steps.hashes.outputs.entry_hash }} |"
           echo "| zipHash | ${{ steps.hashes.outputs.zip_hash }} |"
-          echo ""
-          echo "### ZIP 内容"
-          unzip -l lxmusic-plugin/dist/lxmusic-plugin.jsplugin.zip
-
-      - name: 提交 plugin.json 更新
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add lxmusic-plugin/plugin.json
-          git diff --staged --quiet || git commit -m "chore: update plugin.json for v${{ steps.version.outputs.version }}"
-          git push
 
       - name: 上传产物 (Artifact)
         uses: actions/upload-artifact@v4
         with:
-          name: lxmusic-plugin
-          path: lxmusic-plugin/dist/lxmusic-plugin.jsplugin.zip
+          name: ${{ steps.hashes.outputs.plugin_name }}
+          path: ${{ matrix.plugin }}/dist/${{ steps.hashes.outputs.plugin_name }}.jsplugin.zip
+
+      - name: 暂存 plugin.json 和 zip 供 release 使用
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ steps.hashes.outputs.plugin_name }}
+          path: |
+            ${{ matrix.plugin }}/plugin.json
+            ${{ matrix.plugin }}/dist/${{ steps.hashes.outputs.plugin_name }}.jsplugin.zip
+
+  # 第三步:汇总发布 Release
+  release:
+    needs: [discover, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 下载所有产物
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: false
+          path: artifacts
+
+      - name: 收集所有 zip 和 plugin.json
+        run: |
+          mkdir -p release-assets
+          # 遍历所有 release-* artifact 目录
+          for dir in artifacts/release-*/; do
+            [ -d "$dir" ] || continue
+            # 找到 zip 文件
+            find "$dir" -name '*.jsplugin.zip' -exec cp {} release-assets/ \;
+            # 找到 plugin.json (保留插件名前缀)
+            PLUGIN_DIR=$(find "$dir" -name plugin.json -exec dirname {} \; | head -1)
+            PLUGIN_NAME=$(basename "$(dirname "$PLUGIN_DIR")")
+            cp "$PLUGIN_DIR/plugin.json" "release-assets/${PLUGIN_NAME}.plugin.json"
+          done
+          echo "### Release 资产:"
+          ls -la release-assets/
+
+      - name: 回写所有 plugin.json
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # 遍历所有 plugin.json,复制回对应插件目录
+          for f in release-assets/*.plugin.json; do
+            [ -f "$f" ] || continue
+            PLUGIN_NAME=$(basename "$f" .plugin.json)
+            # 找到对应的插件目录
+            PLUGIN_DIR=$(find . -name plugin.json -not -path '*/node_modules/*' -not -path '*/dist/*' -not -path '*/.git/*' -exec dirname {} \; | grep "$PLUGIN_NAME" | head -1)
+            if [ -n "$PLUGIN_DIR" ]; then
+              cp "$f" "$PLUGIN_DIR/plugin.json"
+              git add "$PLUGIN_DIR/plugin.json"
+            fi
+          done
+
+          git diff --staged --quiet || git commit -m "chore: update plugin.json for v${{ needs.discover.outputs.version }}"
+          git push
+
+      - name: 生成 Release 说明
+        id: notes
+        run: |
+          echo "body<<EOF" >> $GITHUB_OUTPUT
+          echo "## Songloft Plugins v${{ needs.discover.outputs.version }}" >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+          echo "### 安装方式" >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+          echo "在 Songloft 中通过 URL 安装，或下载对应的 \`*.jsplugin.zip\` 手动导入。" >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+          echo "### 插件列表" >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+          echo "| 插件 | entryHash | zipHash | 下载 |" >> $GITHUB_OUTPUT
+          echo "|------|-----------|---------|------|" >> $GITHUB_OUTPUT
+          for f in release-assets/*.plugin.json; do
+            [ -f "$f" ] || continue
+            PLUGIN_NAME=$(basename "$f" .plugin.json)
+            ENTRY_HASH=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$f','utf8')).entryHash || '')")
+            ZIP_HASH=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$f','utf8')).zipHash || '')")
+            ZIP_FILE=$(find release-assets -name "${PLUGIN_NAME}.jsplugin.zip" -exec basename {} \;)
+            echo "| $PLUGIN_NAME | \`$ENTRY_HASH\` | \`$ZIP_HASH\` | [$ZIP_FILE](https://github.com/moonbai/songloft-plugins/releases/download/v${{ needs.discover.outputs.version }}/$ZIP_FILE) |" >> $GITHUB_OUTPUT
+          done
+          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: 创建 Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.version.outputs.version }}
-          name: lxmusic-plugin v${{ steps.version.outputs.version }}
-          files: lxmusic-plugin/dist/lxmusic-plugin.jsplugin.zip
-          body: |
-            ## lxmusic plugin v${{ steps.version.outputs.version }}
-
-            ### 安装方式
-
-            在 Songloft 中通过 URL 安装，或下载 `lxmusic-plugin.jsplugin.zip` 手动导入。
-
-            ### 哈希信息
-
-            | 字段 | 值 |
-            |------|-----|
-            | version | `${{ steps.version.outputs.version }}` |
-            | entryHash | `${{ steps.hashes.outputs.entry_hash }}` |
-            | zipHash | `${{ steps.hashes.outputs.zip_hash }}` |
-
-            ### 下载直链
-
-            ```
-            https://github.com/moonbai/songloft-plugins/releases/download/v${{ steps.version.outputs.version }}/lxmusic-plugin.jsplugin.zip
-            ```
+          tag_name: v${{ needs.discover.outputs.version }}
+          name: Songloft Plugins v${{ needs.discover.outputs.version }}
+          files: release-assets/*.jsplugin.zip
+          body: ${{ steps.notes.outputs.body }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

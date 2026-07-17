@@ -2,7 +2,5 @@ node_modules/
 *.log
 .DS_Store
 
-# 保留构建产物
-# dist/ 目录需要上传
-!**/dist/*.jsplugin.zip
-!**/dist/plugin.json
+# 构建产物不入库，由 GitHub Actions 自动构建
+dist/
