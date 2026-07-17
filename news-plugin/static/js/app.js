@@ -377,19 +377,14 @@ let currentTab = 'hotboard';
 async function api(path, options = {}) {
   try {
     const headers = Object.assign({}, options.headers);
-    const body = options.body;
-    const init = {
-      method: options.method || 'GET',
-      headers: headers,
-    };
-    // 只有发送 body 时才设置 Content-Type，避免 GET 请求触发预检/鉴权 (对齐 lxmusic)
-    if (body instanceof FormData) {
-      init.body = body;
-    } else if (body !== undefined && body !== null) {
-      headers['Content-Type'] = 'application/json';
-      init.body = JSON.stringify(body);
+    // 只有发送 body 时才设置 Content-Type，避免 GET 请求触发预检 (对齐 lxmusic)
+    if (options.body !== undefined && options.body !== null && !(options.body instanceof FormData)) {
+      headers['Content-Type'] = headers['Content-Type'] || 'application/json';
     }
-    const resp = await fetch(API_BASE + path, init);
+    const resp = await fetch(API_BASE + path, {
+      ...options,
+      headers: headers,
+    });
     const text = await resp.text();
     try {
       return JSON.parse(text);
