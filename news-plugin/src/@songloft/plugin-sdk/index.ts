@@ -8,6 +8,23 @@ export interface HTTPRequest {
   body: Uint8Array | null;
 }
 
+export function parseQuery(q: string | undefined | null): Record<string, string> {
+  const result: Record<string, string> = {};
+  if (!q) return result;
+  const str = typeof q === 'string' ? q : String(q);
+  const pairs = str.split('&');
+  for (const pair of pairs) {
+    if (!pair) continue;
+    const idx = pair.indexOf('=');
+    if (idx === -1) {
+      result[decodeURIComponent(pair)] = '';
+    } else {
+      result[decodeURIComponent(pair.slice(0, idx))] = decodeURIComponent(pair.slice(idx + 1));
+    }
+  }
+  return result;
+}
+
 export interface HTTPResponse {
   statusCode: number;
   headers: Record<string, string>;
@@ -83,20 +100,21 @@ export function createRouter(): Router {
       const r = req as Record<string, unknown>;
       const method = String(r.method || 'GET').toUpperCase();
       let path = String(r.path || '');
-      // 确保 path 不含 query string
       const qIdx = path.indexOf('?');
       if (qIdx >= 0) path = path.slice(0, qIdx);
       const matched = matchRoute(method, path);
       if (matched) {
+        const rawQuery = r.query;
+        const parsedQuery = typeof rawQuery === 'string'
+          ? parseQuery(rawQuery)
+          : (rawQuery && typeof rawQuery === 'object' ? rawQuery as Record<string, string> : {});
         const request: HTTPRequest = {
           method,
           path,
-          query: (r.query as Record<string, string>) || {},
+          query: { ...parsedQuery, ...matched.params },
           headers: (r.headers as Record<string, string>) || {},
           body: (r.body as Uint8Array) || null,
         };
-        const params = matched.params;
-        request.query = { ...request.query, ...params };
         const result = matched.handler(request);
         if (result instanceof Promise) {
           return result as Promise<HTTPResponse>;
@@ -142,25 +160,26 @@ export interface SearchResult {
 export function createSearchHandler(opts: { search: (params: SearchParams) => Promise<SearchResult> }): RouteHandler {
   return async (req) => {
     try {
-      const body = req.body;
-      if (!body) {
-        const params = req.query;
-        const result = await opts.search({
-          keyword: params.keyword || '',
-          source_id: params.source_id,
-          page: Number(params.page) || 1,
-          page_size: Number(params.page_size) || 20,
-        });
-        return successResponse(result);
+      let keyword = '';
+      let source_id: string | undefined;
+      let page = 1;
+      let page_size = 20;
+
+      if (req.body) {
+        const text = typeof req.body === 'string' ? req.body : new TextDecoder().decode(req.body);
+        const parsed = JSON.parse(text) as Record<string, unknown>;
+        keyword = String(parsed.keyword || '');
+        source_id = parsed.source_id as string | undefined;
+        page = Number(parsed.page) || 1;
+        page_size = Number(parsed.page_size) || 20;
+      } else {
+        keyword = req.query.keyword || '';
+        source_id = req.query.source_id;
+        page = Number(req.query.page) || 1;
+        page_size = Number(req.query.page_size) || 20;
       }
-      const text = typeof body === 'string' ? body : new TextDecoder().decode(body);
-      const parsed = JSON.parse(text) as Record<string, unknown>;
-      const result = await opts.search({
-        keyword: String(parsed.keyword || ''),
-        source_id: parsed.source_id as string | undefined,
-        page: Number(parsed.page) || 1,
-        page_size: Number(parsed.page_size) || 20,
-      });
+
+      const result = await opts.search({ keyword, source_id, page, page_size });
       return successResponse(result);
     } catch (e) {
       return errorResponse('Search failed: ' + (e as Error).message);
