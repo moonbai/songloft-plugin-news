@@ -1,6 +1,6 @@
 {
   "name": "news",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "entryPath": "news",
   "main": "main.jsc",
   "minHostVersion": "1.0.0",
