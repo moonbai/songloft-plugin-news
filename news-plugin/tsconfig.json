@@ -13,8 +13,7 @@
     "declaration": false,
     "sourceMap": false,
     "noImplicitAny": false,
-    "moduleResolution": "bundler",
-    "ignoreDeprecations": "6.0"
+    "moduleResolution": "bundler"
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
