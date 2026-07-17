@@ -80,9 +80,9 @@ jobs:
             const plugin = JSON.parse(fs.readFileSync('plugin.json', 'utf8'));
             plugin.version = VERSION;
 
-            // entryHash = dist/main.js 的 MD5
+            // entryHash = dist/main.js 的 SHA-256 (64 字符小写 hex)
             const mainJs = fs.readFileSync('dist/main.js');
-            plugin.entryHash = crypto.createHash('md5').update(mainJs).digest('hex');
+            plugin.entryHash = crypto.createHash('sha256').update(mainJs).digest('hex');
             console.log('entryHash:', plugin.entryHash);
 
             // 第一轮打包 (含 entryHash, 不含 zipHash)
@@ -99,7 +99,7 @@ jobs:
             const fs = require('fs');
             const crypto = require('crypto');
             const zip = fs.readFileSync('dist/$PLUGIN_NAME.jsplugin.zip');
-            const zipHash = crypto.createHash('md5').update(zip).digest('hex');
+            const zipHash = crypto.createHash('sha256').update(zip).digest('hex');
             const plugin = JSON.parse(fs.readFileSync('dist/plugin.json', 'utf8'));
             plugin.zipHash = zipHash;
             fs.writeFileSync('dist/plugin.json', JSON.stringify(plugin, null, 2) + '\n');
