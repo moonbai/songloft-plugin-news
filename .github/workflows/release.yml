@@ -4,14 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: '版本号 (留空则用日期自动生成)'
+        description: '版本号 (留空则自动递增)'
         required: false
         default: ''
   push:
     branches:
       - main
-    tags:
-      - 'v*'
 
 permissions:
   contents: write
@@ -26,16 +24,37 @@ jobs:
       version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: 生成版本号
         id: version
         run: |
           if [ -n "${{ github.event.inputs.version }}" ]; then
             VERSION="${{ github.event.inputs.version }}"
-          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            VERSION="${GITHUB_REF#refs/tags/v}"
           else
-            VERSION="$(date +'%Y.%m.%d')"
+            # 获取最新的语义化版本 tag (格式 vX.Y.Z)，过滤掉日期格式
+            git fetch --tags
+            LATEST_TAG=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | while read tag; do
+              ver="${tag#v}"
+              major=$(echo "$ver" | cut -d. -f1)
+              # 跳过日期格式 (major >= 1000 表示年份)
+              if [ "$major" -lt 1000 ] 2>/dev/null; then
+                echo "$tag"
+                break
+              fi
+            done)
+            if [ -n "$LATEST_TAG" ]; then
+              # 从 tag 中提取版本号并递增 patch
+              BASE_VERSION="${LATEST_TAG#v}"
+              MAJOR=$(echo "$BASE_VERSION" | cut -d. -f1)
+              MINOR=$(echo "$BASE_VERSION" | cut -d. -f2)
+              PATCH=$(echo "$BASE_VERSION" | cut -d. -f3)
+              PATCH=$((PATCH + 1))
+              VERSION="${MAJOR}.${MINOR}.${PATCH}"
+            else
+              VERSION="1.0.0"
+            fi
           fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "版本号: $VERSION"
