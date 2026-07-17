@@ -51,7 +51,7 @@ function initRouter() {
       const request = req as any;
       const limit = Number(request.query?.limit) || 10;
       
-      const platforms = ['baidu', 'zhihu', 'toutiao', 'pengpai', 'wangyi'];
+      const platforms = ['weibo', 'baidu', 'zhihu', '36kr', 'toutiao'];
       const promises = platforms.map(async (source) => {
         try {
           const result = await runtimeManager.fetchNewsList(source, 'hot', 1, limit);
@@ -114,11 +114,15 @@ function initRouter() {
   try {
     const request = req as Record<string, unknown>;
     const method = String(request.method || 'GET').toUpperCase();
-    const path = String(request.path || '');
+    const fullPath = String(request.path || '');
+    // 去掉 query string，只保留路径部分用于路由匹配
+    const path = fullPath.split('?')[0];
     
     songloft.log.info(`HTTP request: ${method} ${path}`);
     
-    const result = router.handle(req);
+    // 将清理后的 path 传给路由
+    const routedReq = { ...request, path };
+    const result = router.handle(routedReq);
     
     if (result) {
       return result;

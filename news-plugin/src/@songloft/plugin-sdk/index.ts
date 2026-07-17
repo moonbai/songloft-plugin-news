@@ -82,7 +82,10 @@ export function createRouter(): Router {
     handle(req) {
       const r = req as Record<string, unknown>;
       const method = String(r.method || 'GET').toUpperCase();
-      const path = String(r.path || '');
+      let path = String(r.path || '');
+      // 确保 path 不含 query string
+      const qIdx = path.indexOf('?');
+      if (qIdx >= 0) path = path.slice(0, qIdx);
       const matched = matchRoute(method, path);
       if (matched) {
         const request: HTTPRequest = {
