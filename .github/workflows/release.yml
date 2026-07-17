@@ -165,7 +165,7 @@ jobs:
             find "$dir" -name '*.jsplugin.zip' -exec cp {} release-assets/ \;
             # 找到 plugin.json (保留插件名前缀)
             PLUGIN_DIR=$(find "$dir" -name plugin.json -exec dirname {} \; | head -1)
-            PLUGIN_NAME=$(basename "$(dirname "$PLUGIN_DIR")")
+            PLUGIN_NAME=$(basename "$PLUGIN_DIR")
             cp "$PLUGIN_DIR/plugin.json" "release-assets/${PLUGIN_NAME}.plugin.json"
           done
           echo "### Release 资产:"
@@ -180,8 +180,8 @@ jobs:
           for f in release-assets/*.plugin.json; do
             [ -f "$f" ] || continue
             PLUGIN_NAME=$(basename "$f" .plugin.json)
-            # 找到对应的插件目录
-            PLUGIN_DIR=$(find . -name plugin.json -not -path '*/node_modules/*' -not -path '*/dist/*' -not -path '*/.git/*' -exec dirname {} \; | grep "$PLUGIN_NAME" | head -1)
+            # 找到对应的插件目录 (含 plugin.json 且目录名匹配)
+            PLUGIN_DIR=$(find . -maxdepth 2 -name plugin.json -not -path '*/node_modules/*' -not -path '*/dist/*' -not -path '*/.git/*' -exec dirname {} \; | grep "/${PLUGIN_NAME}$" | head -1)
             if [ -n "$PLUGIN_DIR" ]; then
               cp "$f" "$PLUGIN_DIR/plugin.json"
               git add "$PLUGIN_DIR/plugin.json"
