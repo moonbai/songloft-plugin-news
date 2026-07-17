@@ -1,6 +1,6 @@
 // 播放器 HTTP 处理
 import { platformModules } from '../newsSdk/facade';
-import { successResponse, errorResponse, badRequestResponse } from './response';
+import { successResponse, errorResponse, badRequestResponse, parseJsonBody } from './response';
 import {
   getPlaylists, addToPlaylist, removeFromPlaylist, clearPlaylist,
   getTtsConfig, setTtsConfig,
@@ -17,11 +17,9 @@ export function createPlayerHandlers() {
     async resolve(req: unknown) {
       try {
         const request = req as any;
-        const body = request.body as Uint8Array | null;
-        if (!body) return badRequestResponse('No body');
+        if (!request.body) return badRequestResponse('No body');
 
-        const text = new TextDecoder().decode(body);
-        const parsed = JSON.parse(text) as Record<string, unknown>;
+        const parsed = parseJsonBody(request.body);
         const news = parsed.news as NewsItem;
         const enableTts = parsed.enableTts !== false;
 
@@ -67,11 +65,9 @@ export function createPlayerHandlers() {
     async addToPlaylist(req: unknown) {
       try {
         const request = req as any;
-        const body = request.body as Uint8Array | null;
-        if (!body) return badRequestResponse('No body');
+        if (!request.body) return badRequestResponse('No body');
 
-        const text = new TextDecoder().decode(body);
-        const parsed = JSON.parse(text) as Record<string, unknown>;
+        const parsed = parseJsonBody(request.body);
         const news = parsed.news as NewsItem;
         const listName = String(parsed.listName || 'default');
 
@@ -165,11 +161,10 @@ export function createPlayerHandlers() {
     async setTtsConfig(req: unknown) {
       try {
         const request = req as any;
-        const body = request.body as Uint8Array | null;
-        if (!body) return badRequestResponse('No body');
+        if (!request.body) return badRequestResponse('No body');
 
-        const text = new TextDecoder().decode(body);
-        const config = JSON.parse(text) as TtsConfig;
+        const parsed = parseJsonBody(request.body);
+        const config = parsed as unknown as TtsConfig;
         await setTtsConfig(config);
         return successResponse({ success: true });
       } catch (e) {

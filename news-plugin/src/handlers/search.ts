@@ -1,6 +1,6 @@
 // 搜索处理
 import { sources, platformModules } from '../newsSdk/facade';
-import { successResponse, errorResponse, badRequestResponse } from './response';
+import { successResponse, errorResponse, badRequestResponse, parseJsonBody } from './response';
 import type { NewsItem } from '../types';
 
 export function createSearchHandlers() {
@@ -8,14 +8,12 @@ export function createSearchHandlers() {
     async search(req: unknown) {
       try {
         const request = req as any;
-        const body = request.body as Uint8Array | null;
         const params = request.query || {};
-        
+
         let keyword: string, source_id: string, page: number, page_size: number;
-        
-        if (body) {
-          const text = new TextDecoder().decode(body);
-          const parsed = JSON.parse(text) as Record<string, unknown>;
+
+        if (request.body) {
+          const parsed = parseJsonBody(request.body);
           keyword = String(parsed.keyword || '');
           source_id = String(parsed.source_id || 'all');
           page = Number(parsed.page) || 1;

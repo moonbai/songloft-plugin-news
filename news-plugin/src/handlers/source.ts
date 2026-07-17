@@ -1,6 +1,6 @@
 // source 管理处理
 import type { SourceManager } from '../source';
-import { successResponse, errorResponse, badRequestResponse } from './response';
+import { successResponse, errorResponse, badRequestResponse, parseJsonBody } from './response';
 
 export function createSourceHandlers(sourceManager: SourceManager) {
   return {
@@ -32,11 +32,9 @@ export function createSourceHandlers(sourceManager: SourceManager) {
     async importSource(req: unknown) {
       try {
         const request = req as any;
-        const body = request.body as Uint8Array | null;
-        if (!body) return badRequestResponse('No body provided');
+        if (!request.body) return badRequestResponse('No body provided');
 
-        const text = new TextDecoder().decode(body);
-        const parsed = JSON.parse(text) as Record<string, unknown>;
+        const parsed = parseJsonBody(request.body);
 
         const name = String(parsed.name || 'imported_source');
         const content = String(parsed.content || '');
@@ -56,11 +54,9 @@ export function createSourceHandlers(sourceManager: SourceManager) {
     async importSourceUrl(req: unknown) {
       try {
         const request = req as any;
-        const body = request.body as Uint8Array | null;
-        if (!body) return badRequestResponse('No body provided');
+        if (!request.body) return badRequestResponse('No body provided');
 
-        const text = new TextDecoder().decode(body);
-        const parsed = JSON.parse(text) as Record<string, unknown>;
+        const parsed = parseJsonBody(request.body);
 
         const url = String(parsed.url || '');
         if (!url) return badRequestResponse('url is required');
@@ -78,11 +74,9 @@ export function createSourceHandlers(sourceManager: SourceManager) {
     async toggleSource(req: unknown) {
       try {
         const request = req as any;
-        const body = request.body as Uint8Array | null;
-        if (!body) return badRequestResponse('No body provided');
+        if (!request.body) return badRequestResponse('No body provided');
 
-        const text = new TextDecoder().decode(body);
-        const parsed = JSON.parse(text) as Record<string, unknown>;
+        const parsed = parseJsonBody(request.body);
 
         const id = String(parsed.id || '');
         const enabled = Boolean(parsed.enabled);
