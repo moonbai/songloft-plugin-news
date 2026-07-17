@@ -1,5 +1,6 @@
 // 单个 source 脚本的运行时
-import prelude from './lx_prelude';
+// 使用官方 songloft.jsenv API (async, __go_send 事件机制)
+import lxNewsPrelude from './lx_prelude';
 import type { LxSource, ParsedScript } from './types';
 
 export interface RuntimeOptions {
@@ -8,54 +9,79 @@ export interface RuntimeOptions {
   onError?: (err: Error) => void;
 }
 
+let reqIdCounter = 0;
+function nextReqId(): string {
+  reqIdCounter++;
+  return 'req_' + Date.now() + '_' + reqIdCounter;
+}
+
 export class SourceRuntime {
   name: string;
   script: string;
   inited: boolean = false;
   sources: LxSource[] = [];
-  private eventBuffer: Array<{ eventName?: string; id?: string; data?: unknown; error?: string }> = [];
+  private envName: string;
 
   constructor(options: RuntimeOptions) {
     this.name = options.name;
     this.script = options.script;
+    this.envName = `news_source_${this.name}`;
   }
 
   async init(): Promise<boolean> {
     try {
-      songloft.jsenv.create(this.envName);
-      
-      // 注入 prelude（lx 全局对象）
-      songloft.jsenv.executeWait(this.envName, prelude, 5000, []);
-      
-      // 注入 channel 函数
-      songloft.jsenv.injectFunction(this.envName, 'lx_event', (...args: unknown[]) => {
-        this.handleEvent(args[0] as string);
-      });
-
-      // 执行用户脚本
-      const rawScript = this.wrapScript(this.script);
-      const result = songloft.jsenv.executeWait(
-        this.envName,
-        rawScript,
-        30000,
-        ['lx_event']
-      );
-
-      const eventData = this.parseEventResult(result);
-      if (eventData?.eventName === 'inited') {
-        const data = eventData.data as Record<string, unknown>;
-        this.sources = (data?.sources as LxSource[]) || [];
-        this.inited = true;
-        songloft.log.info(`Source ${this.name} initialized with platforms: ${this.getPlatforms().join(', ')}`);
-        return true;
+      // 1. 创建子 VM,注入 prelude
+      const created = await songloft.jsenv.create(this.envName, lxNewsPrelude);
+      if (!created) {
+        songloft.log.error(`Failed to create jsenv for ${this.name}`);
+        return false;
       }
 
-      songloft.log.warn(`Source ${this.name} did not emit inited event`);
-      this.destroy();
-      return false;
+      // 2. 执行用户脚本 (注册 handlers)
+      const execResult = await songloft.jsenv.execute(this.envName, this.script + '\n;lx.notifyInited();', 10000);
+      if (!execResult.ok && execResult.error) {
+        songloft.log.warn(`[${this.name}] Script execution warning: ${execResult.error}`);
+      }
+
+      // 3. 等待 inited 事件
+      const waitResult = await songloft.jsenv.executeWait(
+        this.envName,
+        ';', // no-op, just wait for events
+        30000,
+        ['inited'],
+      );
+
+      if (!waitResult.ok) {
+        songloft.log.error(`[${this.name}] Init failed: ${waitResult.error || 'timeout'}`);
+        await this.destroy();
+        return false;
+      }
+
+      // 解析 inited 事件数据
+      let initedSources: LxSource[] = [];
+      if (waitResult.events) {
+        for (const evt of waitResult.events) {
+          if (evt.name === 'inited') {
+            const data = evt.data as { sources?: LxSource[] };
+            initedSources = data?.sources || [];
+            break;
+          }
+        }
+      }
+
+      if (initedSources.length === 0) {
+        songloft.log.warn(`[${this.name}] No sources from inited event`);
+        await this.destroy();
+        return false;
+      }
+
+      this.sources = initedSources;
+      this.inited = true;
+      songloft.log.info(`[${this.name}] Initialized with platforms: ${this.getPlatforms().join(', ')}`);
+      return true;
     } catch (error) {
       songloft.log.error(`Failed to initialize source ${this.name}:`, error);
-      this.destroy();
+      await this.destroy();
       return false;
     }
   }
@@ -67,31 +93,34 @@ export class SourceRuntime {
     if (!this.inited) {
       throw new Error(`Source ${this.name} not initialized`);
     }
-    
-    try {
-      const reqId = 'req_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-      const dispatchCode = `lx._dispatch('${reqId}', 'request', ${JSON.stringify(dispatchData)});`;
 
-      const result = songloft.jsenv.executeWait(
-        this.envName,
-        dispatchCode,
-        18000,
-        ['lx_event']
-      );
+    const reqId = nextReqId();
+    const dispatchCode = `lx._dispatch(${JSON.stringify(reqId)}, 'request', ${JSON.stringify(dispatchData)});`;
 
-      const dispatchResult = this.parseDispatchResult(result);
-      if (dispatchResult && dispatchResult.id === reqId) {
-        if (dispatchResult.error) {
-          throw new Error(dispatchResult.error);
-        }
-        return dispatchResult.data;
-      }
+    const result = await songloft.jsenv.executeWait(
+      this.envName,
+      dispatchCode,
+      18000,
+      ['dispatchResult', 'dispatchError'],
+    );
 
-      throw new Error('No response from source script');
-    } catch (error) {
-      songloft.log.error(`Source ${this.name} dispatch failed:`, error);
-      throw error;
+    if (!result.ok) {
+      throw new Error(`Source ${this.name} dispatch failed: ${result.error || 'timeout'}`);
     }
+
+    if (result.events) {
+      for (const evt of result.events) {
+        const evtData = evt.data as { id?: string; result?: unknown; error?: string };
+        if (evt.name === 'dispatchResult' && evtData?.id === reqId) {
+          return evtData.result;
+        }
+        if (evt.name === 'dispatchError' && evtData?.id === reqId) {
+          throw new Error(evtData.error || 'Dispatch error');
+        }
+      }
+    }
+
+    throw new Error('No response from source script');
   }
 
   /**
@@ -110,51 +139,17 @@ export class SourceRuntime {
     return Array.from(platforms);
   }
 
-  destroy() {
+  async destroy(): Promise<void> {
     try {
-      songloft.jsenv.destroy(this.envName);
+      await songloft.jsenv.destroy(this.envName);
     } catch (e) {
       // ignore
     }
     this.inited = false;
   }
 
-  private get envName(): string {
-    return `news_source_${this.name}`;
-  }
-
   private handleEvent(data: string) {
-    try {
-      const parsed = JSON.parse(data);
-      this.eventBuffer.push(parsed);
-    } catch (e) {
-      songloft.log.warn(`Source ${this.name} event parse error:`, e);
-    }
-  }
-
-  private parseEventResult(result: unknown): { eventName?: string; id?: string; data?: unknown; error?: string } | null {
-    if (Array.isArray(result) && result.length > 0) {
-      return result[0] as { eventName?: string; id?: string; data?: unknown; error?: string };
-    }
-    if (result && typeof result === 'object') {
-      return result as { eventName?: string; id?: string; data?: unknown; error?: string };
-    }
-    return null;
-  }
-
-  private parseDispatchResult(result: unknown): { id?: string; data?: unknown; error?: string } | null {
-    if (Array.isArray(result) && result.length > 0) {
-      return result[0] as { id?: string; data?: unknown; error?: string };
-    }
-    if (result && typeof result === 'object') {
-      return result as { id?: string; data?: unknown; error?: string };
-    }
-    return null;
-  }
-
-  private wrapScript(script: string): string {
-    // 在脚本末尾自动调用 notifyInited
-    return script + '\n;lx.notifyInited();';
+    // 不再需要,事件通过 __go_send → executeWait 的 events 返回
   }
 }
 
@@ -164,7 +159,7 @@ export class SourceRuntime {
 export function parseScriptMetadata(script: string): ParsedScript {
   const sources: LxSource[] = [];
   const regex = /\/\*\*\s*\*\s*@name\s+([^\n]+)\s*\*\s*@version\s+([^\n]+)\s*\*\s*@author\s+([^\n]+)\s*\*\s*@description\s+([^\n]+)\s*\*\s*@id\s+([^\n]+)\s*\*\s*@platforms\s+([^\n]+)\s*\*\//g;
-  
+
   let match;
   while ((match = regex.exec(script)) !== null) {
     sources.push({

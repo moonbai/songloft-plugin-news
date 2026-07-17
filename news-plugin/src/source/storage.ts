@@ -1,10 +1,10 @@
-// 存储辅助
+// 存储辅助 (async — 官方 SDK storage 返回 Promise)
 
 const SOURCES_KEY = 'news_custom_sources';
 
-export function getStoredSources(): any[] {
+export async function getStoredSources(): Promise<any[]> {
   try {
-    const raw = songloft.storage.get(SOURCES_KEY);
+    const raw = await songloft.storage.get(SOURCES_KEY);
     if (!raw) return [];
     return JSON.parse(raw);
   } catch (e) {
@@ -12,9 +12,9 @@ export function getStoredSources(): any[] {
   }
 }
 
-export function setStoredSources(sources: any[]): void {
+export async function setStoredSources(sources: any[]): Promise<void> {
   try {
-    songloft.storage.set(SOURCES_KEY, JSON.stringify(sources));
+    await songloft.storage.set(SOURCES_KEY, JSON.stringify(sources));
   } catch (e) {
     songloft.log.error('Failed to store sources:', e);
   }

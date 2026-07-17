@@ -1,4 +1,4 @@
-// 播放列表存储
+// 播放列表存储 (async — 官方 SDK storage 返回 Promise)
 
 const PLAYLIST_KEY = 'news_playlists';
 const TTS_CONFIG_KEY = 'news_tts_config';
@@ -37,9 +37,9 @@ export function getDefaultTtsConfig(): TtsConfig {
   };
 }
 
-export function getTtsConfig(): TtsConfig {
+export async function getTtsConfig(): Promise<TtsConfig> {
   try {
-    const raw = songloft.storage.get(TTS_CONFIG_KEY);
+    const raw = await songloft.storage.get(TTS_CONFIG_KEY);
     if (!raw) return getDefaultTtsConfig();
     return { ...getDefaultTtsConfig(), ...JSON.parse(raw) };
   } catch (e) {
@@ -47,17 +47,17 @@ export function getTtsConfig(): TtsConfig {
   }
 }
 
-export function setTtsConfig(config: TtsConfig): void {
+export async function setTtsConfig(config: TtsConfig): Promise<void> {
   try {
-    songloft.storage.set(TTS_CONFIG_KEY, JSON.stringify(config));
+    await songloft.storage.set(TTS_CONFIG_KEY, JSON.stringify(config));
   } catch (e) {
     songloft.log.error('Failed to save TTS config:', e);
   }
 }
 
-export function getPlaylists(): { name: string; items: PlaylistItem[] }[] {
+export async function getPlaylists(): Promise<{ name: string; items: PlaylistItem[] }[]> {
   try {
-    const raw = songloft.storage.get(PLAYLIST_KEY);
+    const raw = await songloft.storage.get(PLAYLIST_KEY);
     if (!raw) return [];
     return JSON.parse(raw);
   } catch (e) {
@@ -65,57 +65,57 @@ export function getPlaylists(): { name: string; items: PlaylistItem[] }[] {
   }
 }
 
-export function setPlaylists(playlists: { name: string; items: PlaylistItem[] }[]): void {
+export async function setPlaylists(playlists: { name: string; items: PlaylistItem[] }[]): Promise<void> {
   try {
-    songloft.storage.set(PLAYLIST_KEY, JSON.stringify(playlists));
+    await songloft.storage.set(PLAYLIST_KEY, JSON.stringify(playlists));
   } catch (e) {
     songloft.log.error('Failed to save playlists:', e);
   }
 }
 
-export function getDefaultPlaylist(): { name: string; items: PlaylistItem[] } {
-  const all = getPlaylists();
+export async function getDefaultPlaylist(): Promise<{ name: string; items: PlaylistItem[] }> {
+  const all = await getPlaylists();
   const existing = all.find(p => p.name === 'default');
   if (existing) return existing;
   const newList = { name: 'default', items: [] };
   all.push(newList);
-  setPlaylists(all);
+  await setPlaylists(all);
   return newList;
 }
 
-export function addToPlaylist(item: PlaylistItem, listName = 'default'): boolean {
-  const all = getPlaylists();
+export async function addToPlaylist(item: PlaylistItem, listName = 'default'): Promise<boolean> {
+  const all = await getPlaylists();
   let list = all.find(p => p.name === listName);
   if (!list) {
     list = { name: listName, items: [] };
     all.push(list);
   }
-  
+
   if (list.items.find(i => i.id === item.id && i.source === item.source)) {
     return false; // 已存在
   }
-  
+
   list.items.push(item);
-  setPlaylists(all);
+  await setPlaylists(all);
   return true;
 }
 
-export function removeFromPlaylist(id: string, source: string, listName = 'default'): boolean {
-  const all = getPlaylists();
+export async function removeFromPlaylist(id: string, source: string, listName = 'default'): Promise<boolean> {
+  const all = await getPlaylists();
   const list = all.find(p => p.name === listName);
   if (!list) return false;
   const idx = list.items.findIndex(i => i.id === id && i.source === source);
   if (idx < 0) return false;
   list.items.splice(idx, 1);
-  setPlaylists(all);
+  await setPlaylists(all);
   return true;
 }
 
-export function clearPlaylist(listName = 'default'): boolean {
-  const all = getPlaylists();
+export async function clearPlaylist(listName = 'default'): Promise<boolean> {
+  const all = await getPlaylists();
   const list = all.find(p => p.name === listName);
   if (!list) return false;
   list.items = [];
-  setPlaylists(all);
+  await setPlaylists(all);
   return true;
 }

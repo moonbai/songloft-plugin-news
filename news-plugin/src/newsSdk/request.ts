@@ -1,4 +1,4 @@
-// HTTP 请求封装
+// HTTP 请求封装 — 使用全局 fetch (QuickJS polyfill)
 
 export interface HttpResponse {
   status: number;
@@ -13,31 +13,34 @@ function httpFetch(url: string, options: {
   timeout?: number;
 } = {}): Promise<HttpResponse> {
   return (async () => {
-    const resp = await songloft.http.fetch(url, {
-      method: options.method || 'GET',
-      headers: options.headers || {},
-      body: options.body,
-      timeout: options.timeout || 15000,
-    });
+    const method = options.method || 'GET';
+    const headers = options.headers || {};
+    const body = options.body as BodyInit | undefined;
 
-    const text = typeof resp.body === 'string' ? resp.body : new TextDecoder().decode(resp.body as Uint8Array);
-    let body: any = text;
+    const resp = await fetch(url, { method, headers, body });
+
+    const text = await resp.text();
+    let bodyData: any = text;
 
     // 先检查 content-type
-    const contentType = resp.headers['Content-Type'] || resp.headers['content-type'] || '';
+    const respHeaders: Record<string, string> = {};
+    resp.headers.forEach((val: string, key: string) => {
+      respHeaders[key.toLowerCase()] = val;
+    });
+    const contentType = respHeaders['content-type'] || '';
     if (contentType.includes('application/json')) {
-      try { body = JSON.parse(text); } catch (e) { body = text; }
+      try { bodyData = JSON.parse(text); } catch (e) { bodyData = text; }
     } else {
       // content-type 不是 JSON 时，仍尝试自动解析（很多 API 返回 JSON 但 content-type 不对）
       const trimmed = text.trim();
       if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-        try { body = JSON.parse(trimmed); } catch (e) { body = text; }
+        try { bodyData = JSON.parse(trimmed); } catch (e) { bodyData = text; }
       }
     }
 
     return {
       status: resp.status,
-      body,
+      body: bodyData,
       raw: text,
     };
   })();

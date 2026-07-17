@@ -9,7 +9,7 @@ export interface HTTPRequest {
 }
 
 export interface HTTPResponse {
-  status: number;
+  statusCode: number;
   headers: Record<string, string>;
   body: Uint8Array | string;
 }
@@ -110,7 +110,7 @@ export function createRouter(): Router {
 
 export function jsonResponse(data: unknown, status = 200): HTTPResponse {
   return {
-    status,
+    statusCode: status,
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   };

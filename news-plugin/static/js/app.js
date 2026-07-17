@@ -65,7 +65,7 @@ class NewsPlayer {
   
   async _loadTtsConfig() {
     try {
-      const result = await fetch('/api/player/tts-config').then(r => r.json());
+      const result = await fetch('./api/player/tts-config').then(r => r.json());
       if (result.code === 0 && result.data) {
         this.ttsConfig = { ...this.ttsConfig, ...result.data };
       }
@@ -76,7 +76,7 @@ class NewsPlayer {
   
   async _saveTtsConfig() {
     try {
-      await fetch('/api/player/tts-config', {
+      await fetch('./api/player/tts-config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(this.ttsConfig),
@@ -159,7 +159,7 @@ class NewsPlayer {
     
     try {
       // 先获取 TTS 脚本（含 content）
-      const result = await fetch('/api/player/resolve', {
+      const result = await fetch('./api/player/resolve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ news, enableTts: true }),
@@ -370,7 +370,7 @@ class NewsPlayer {
 }
 
 // 前端应用
-const API_BASE = '/api';
+const API_BASE = './api';
 let player = null;
 let currentTab = 'hotboard';
 

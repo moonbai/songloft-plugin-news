@@ -1,9 +1,8 @@
 // 播放器 HTTP 处理
 import { platformModules } from '../newsSdk/facade';
 import { successResponse, errorResponse, badRequestResponse } from './response';
-import { 
-  getPlaylists, setPlaylists, getDefaultPlaylist,
-  addToPlaylist, removeFromPlaylist, clearPlaylist,
+import {
+  getPlaylists, addToPlaylist, removeFromPlaylist, clearPlaylist,
   getTtsConfig, setTtsConfig,
   buildTtsScript,
 } from '../player';
@@ -20,19 +19,19 @@ export function createPlayerHandlers() {
         const request = req as any;
         const body = request.body as Uint8Array | null;
         if (!body) return badRequestResponse('No body');
-        
+
         const text = new TextDecoder().decode(body);
         const parsed = JSON.parse(text) as Record<string, unknown>;
         const news = parsed.news as NewsItem;
         const enableTts = parsed.enableTts !== false;
-        
+
         if (!news) return badRequestResponse('news is required');
-        
+
         const module = platformModules[news.source];
         let audioUrl = news.audioUrl;
         let audioDuration = news.audioDuration;
         let content = news.content;
-        
+
         // 如果没有 audioUrl 但有详情，先获取详情
         if (!audioUrl && module && !news.content) {
           try {
@@ -46,9 +45,9 @@ export function createPlayerHandlers() {
             // 忽略
           }
         }
-        
+
         const ttsScript = enableTts ? buildTtsScript(news, content) : null;
-        
+
         return successResponse({
           news: { ...news, audioUrl, audioDuration, content },
           audioUrl: audioUrl || null,
@@ -70,14 +69,14 @@ export function createPlayerHandlers() {
         const request = req as any;
         const body = request.body as Uint8Array | null;
         if (!body) return badRequestResponse('No body');
-        
+
         const text = new TextDecoder().decode(body);
         const parsed = JSON.parse(text) as Record<string, unknown>;
         const news = parsed.news as NewsItem;
         const listName = String(parsed.listName || 'default');
-        
+
         if (!news) return badRequestResponse('news is required');
-        
+
         const item: PlaylistItem = {
           id: news.id,
           title: news.title,
@@ -91,8 +90,8 @@ export function createPlayerHandlers() {
           publishTime: news.publishTime,
           addTime: Date.now(),
         };
-        
-        const success = addToPlaylist(item, listName);
+
+        const success = await addToPlaylist(item, listName);
         return successResponse({ success, message: success ? '已添加' : '已在列表中' });
       } catch (e) {
         return errorResponse('Add failed: ' + (e as Error).message);
@@ -109,10 +108,10 @@ export function createPlayerHandlers() {
         const id = String(query.id || '');
         const source = String(query.source || '');
         const listName = String(query.listName || 'default');
-        
+
         if (!id || !source) return badRequestResponse('id and source are required');
-        
-        const success = removeFromPlaylist(id, source, listName);
+
+        const success = await removeFromPlaylist(id, source, listName);
         return successResponse({ success });
       } catch (e) {
         return errorResponse('Remove failed: ' + (e as Error).message);
@@ -126,7 +125,7 @@ export function createPlayerHandlers() {
       try {
         const request = req as any;
         const listName = String(request.query?.listName || 'default');
-        const all = getPlaylists();
+        const all = await getPlaylists();
         const list = all.find(p => p.name === listName) || { name: listName, items: [] };
         return successResponse(list);
       } catch (e) {
@@ -141,7 +140,7 @@ export function createPlayerHandlers() {
       try {
         const request = req as any;
         const listName = String(request.query?.listName || 'default');
-        clearPlaylist(listName);
+        await clearPlaylist(listName);
         return successResponse({ success: true });
       } catch (e) {
         return errorResponse('Clear failed: ' + (e as Error).message);
@@ -153,7 +152,7 @@ export function createPlayerHandlers() {
      */
     async getTtsConfig(req: unknown) {
       try {
-        const config = getTtsConfig();
+        const config = await getTtsConfig();
         return successResponse(config);
       } catch (e) {
         return errorResponse('Get TTS config failed');
@@ -168,10 +167,10 @@ export function createPlayerHandlers() {
         const request = req as any;
         const body = request.body as Uint8Array | null;
         if (!body) return badRequestResponse('No body');
-        
+
         const text = new TextDecoder().decode(body);
         const config = JSON.parse(text) as TtsConfig;
-        setTtsConfig(config);
+        await setTtsConfig(config);
         return successResponse({ success: true });
       } catch (e) {
         return errorResponse('Save TTS config failed');
@@ -180,14 +179,13 @@ export function createPlayerHandlers() {
 
     /**
      * 一键获取"可播放新闻"列表
-     * 合并所有平台的新闻，按发布时间倒序，标记每个是否可播放
      */
     async getPlayableNews(req: unknown) {
       try {
         const request = req as any;
         const limit = Number(request.query?.limit) || 30;
         const platforms = ['ximalaya', 'dedao', 'weibo', '36kr', 'toutiao', 'wangyi', 'pengpai', 'baidu', 'zhihu'];
-        
+
         const promises = platforms.map(async (sourceId) => {
           try {
             const module = platformModules[sourceId];
@@ -198,7 +196,7 @@ export function createPlayerHandlers() {
             return { source: sourceId, news: [] };
           }
         });
-        
+
         const results = await Promise.all(promises);
         const allNews: NewsItem[] = [];
         for (const r of results) {
@@ -210,10 +208,10 @@ export function createPlayerHandlers() {
             });
           }
         }
-        
+
         // 按发布时间倒序
         allNews.sort((a, b) => b.publishTime - a.publishTime);
-        
+
         return successResponse({
           news: allNews.slice(0, limit),
           total: allNews.length,

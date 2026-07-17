@@ -34,15 +34,15 @@ export function createSourceHandlers(sourceManager: SourceManager) {
         const request = req as any;
         const body = request.body as Uint8Array | null;
         if (!body) return badRequestResponse('No body provided');
-        
+
         const text = new TextDecoder().decode(body);
         const parsed = JSON.parse(text) as Record<string, unknown>;
-        
+
         const name = String(parsed.name || 'imported_source');
         const content = String(parsed.content || '');
-        
+
         if (!content) return badRequestResponse('content is required');
-        
+
         const source = sourceManager.importJs(name, content);
         return successResponse({ source });
       } catch (e) {
@@ -58,13 +58,13 @@ export function createSourceHandlers(sourceManager: SourceManager) {
         const request = req as any;
         const body = request.body as Uint8Array | null;
         if (!body) return badRequestResponse('No body provided');
-        
+
         const text = new TextDecoder().decode(body);
         const parsed = JSON.parse(text) as Record<string, unknown>;
-        
+
         const url = String(parsed.url || '');
         if (!url) return badRequestResponse('url is required');
-        
+
         const result = await sourceManager.importFromUrl(url);
         return successResponse({ sources: Array.isArray(result) ? result : [result] });
       } catch (e) {
@@ -80,18 +80,18 @@ export function createSourceHandlers(sourceManager: SourceManager) {
         const request = req as any;
         const body = request.body as Uint8Array | null;
         if (!body) return badRequestResponse('No body provided');
-        
+
         const text = new TextDecoder().decode(body);
         const parsed = JSON.parse(text) as Record<string, unknown>;
-        
+
         const id = String(parsed.id || '');
         const enabled = Boolean(parsed.enabled);
-        
+
         if (!id) return badRequestResponse('id is required');
-        
-        const success = sourceManager.setEnabled(id, enabled);
+
+        const success = await sourceManager.setEnabled(id, enabled);
         if (!success) return errorResponse('Source not found', 404);
-        
+
         return successResponse({ success: true });
       } catch (e) {
         return errorResponse('Failed to toggle source');
@@ -107,10 +107,10 @@ export function createSourceHandlers(sourceManager: SourceManager) {
         const query = request.query || {};
         const id = String(query.id || '');
         if (!id) return badRequestResponse('id is required');
-        
-        const success = sourceManager.delete(id);
+
+        const success = await sourceManager.delete(id);
         if (!success) return errorResponse('Source not found', 404);
-        
+
         return successResponse({ success: true });
       } catch (e) {
         return errorResponse('Failed to delete source');

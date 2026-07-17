@@ -14,13 +14,13 @@ export class RuntimeManager {
     if (this.runtimes.has(name)) {
       songloft.log.warn(`Source ${name} already loaded, destroying old runtime`);
       const old = this.runtimes.get(name);
-      if (old) old.destroy();
+      if (old) await old.destroy();
       this.runtimes.delete(name);
     }
 
     const runtime = new SourceRuntime({ name, script });
     this.runtimes.set(name, runtime);
-    
+
     const initPromise = runtime.init();
     this.initPromises.set(name, initPromise);
     return await initPromise;
@@ -36,10 +36,10 @@ export class RuntimeManager {
   /**
    * 卸载一个 source
    */
-  unloadSource(name: string): void {
+  async unloadSource(name: string): Promise<void> {
     const runtime = this.runtimes.get(name);
     if (runtime) {
-      runtime.destroy();
+      await runtime.destroy();
       this.runtimes.delete(name);
     }
     this.initPromises.delete(name);
@@ -164,10 +164,12 @@ export class RuntimeManager {
     return null;
   }
 
-  clear() {
+  async clear(): Promise<void> {
+    const destroyPromises: Promise<void>[] = [];
     for (const runtime of this.runtimes.values()) {
-      runtime.destroy();
+      destroyPromises.push(runtime.destroy());
     }
+    await Promise.all(destroyPromises);
     this.runtimes.clear();
     this.initPromises.clear();
   }
