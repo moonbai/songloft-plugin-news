@@ -1,6 +1,6 @@
 {
   "name": "lxmusic",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "entryPath": "lxmusic",
   "main": "main.jsc",
   "minHostVersion": "1.0.0",
@@ -15,7 +15,7 @@
   "description": "LX Music Source Plugin - 多平台音乐搜索与播放",
   "author": "hanxi",
   "updateUrl": "https://github.com/moonbai/songloft-plugins/raw/main/lxmusic-plugin/plugin.json",
-  "download_url": "https://github.com/moonbai/songloft-plugins/releases/download/v1.0.6/lxmusic.jsplugin.zip",
+  "download_url": "https://github.com/moonbai/songloft-plugins/releases/download/v1.0.7/lxmusic.jsplugin.zip",
   "entryHash": "d8e837d41c47e99fc47b6f8c238dbf1fb54f3bc89185c6fc8434d448e8a00819",
   "zipHash": "9174b4c7caf7765f45ec16350aef4db74028066db3e4db2fb80d5f14cb97aa4f"
 }
