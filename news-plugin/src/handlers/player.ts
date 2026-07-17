@@ -186,7 +186,7 @@ export function createPlayerHandlers() {
       try {
         const request = req as any;
         const limit = Number(request.query?.limit) || 30;
-        const platforms = ['ximalaya', 'dedao', 'toutiao', 'wangyi', 'pengpai'];
+        const platforms = ['ximalaya', 'dedao', 'weibo', '36kr', 'toutiao', 'wangyi', 'pengpai', 'baidu', 'zhihu'];
         
         const promises = platforms.map(async (sourceId) => {
           try {

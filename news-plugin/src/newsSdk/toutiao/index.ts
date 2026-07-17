@@ -51,7 +51,7 @@ const newsDetail = {
     const resp = await httpFetch(url, {
       headers: { 'User-Agent': 'Mozilla/5.0' },
     });
-    const raw = String(resp.body || '');
+    const raw = resp.raw || String(resp.body || '');
     const titleMatch = raw.match(/<title>([^<]+)<\/title>/);
     const title = titleMatch ? titleMatch[1] : '';
     return {

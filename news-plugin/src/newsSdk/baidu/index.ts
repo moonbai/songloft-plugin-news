@@ -23,7 +23,7 @@ const newsList = {
     const resp = await httpFetch(url, {
       headers: { 'User-Agent': 'Mozilla/5.0' },
     });
-    const raw = String(resp.body || '');
+    const raw = resp.raw || String(resp.body || '');
     const contentMatch = raw.match(/<!--s-data:({.+?})-->/);
     if (!contentMatch) return { news: [] };
     let data: any;
@@ -77,7 +77,7 @@ const newsSearch = {
     const resp = await httpFetch(url, {
       headers: { 'User-Agent': 'Mozilla/5.0' },
     });
-    const raw = String(resp.body || '');
+    const raw = resp.raw || String(resp.body || '');
     const titleRegex = /<h3[^>]*>\s*<a[^>]+href="([^"]+)"[^>]*>([^<]+)<\/a>/g;
     const news: NewsItem[] = [];
     let match;

@@ -811,12 +811,14 @@ function attachPlaylistHandlers(container, list) {
   });
 }
 
-document.getElementById('playPlaylistBtn').addEventListener('click', () => {
-  if (player.queue.length === 0) {
+document.getElementById('playPlaylistBtn').addEventListener('click', async () => {
+  // 重新从 API 加载播放列表
+  const result = await api('/player/playlist');
+  if (result.code !== 0 || !result.data?.items || result.data.items.length === 0) {
     showToast('播放列表为空', 'error');
     return;
   }
-  player.setQueue(player.queue, 0);
+  player.setQueue(result.data.items, 0);
   showToast('开始播放列表', 'success');
 });
 

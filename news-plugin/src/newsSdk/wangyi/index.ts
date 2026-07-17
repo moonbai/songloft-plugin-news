@@ -26,7 +26,7 @@ const newsList = {
         'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 13_0 like Mac OS X)',
       },
     });
-    const raw = String(resp.body || '');
+    const raw = resp.raw || String(resp.body || '');
     const jsonStr = raw.replace(/^[^[]*/, '').replace(/[^]]*$/, '');
     let data: any[] = [];
     try {
@@ -55,7 +55,7 @@ const newsDetail = {
     const resp = await httpFetch(url, {
       headers: { 'User-Agent': 'Mozilla/5.0' },
     });
-    const raw = String(resp.body || '');
+    const raw = resp.raw || String(resp.body || '');
     const titleMatch = raw.match(/<title>([^<]+)<\/title>/);
     return {
       news: {
@@ -77,7 +77,7 @@ const newsSearch = {
     const resp = await httpFetch(url, {
       headers: { 'User-Agent': 'Mozilla/5.0' },
     });
-    const raw = String(resp.body || '');
+    const raw = resp.raw || String(resp.body || '');
     const titleRegex = /<a[^>]+href="(\/news\/article\/[^"]+)"[^>]*>([^<]+)<\/a>/g;
     const news: NewsItem[] = [];
     let match;

@@ -50,18 +50,38 @@ const newsDetail = {
     const resp = await httpFetch(url, {
       headers: { 'User-Agent': 'Mozilla/5.0' },
     });
-    const raw = String(resp.body || '');
-    const titleMatch = raw.match(/<title>([^<]+)<\/title>/);
+    const raw = resp.raw || String(resp.body || '');
+    let title = '';
+    let content = '';
+    // 尝试从 __NEXT_DATA__ 中提取
+    const jsonMatch = raw.match(/__NEXT_DATA__[^>]*>([^<]+)</);
+    if (jsonMatch) {
+      try {
+        const data = JSON.parse(jsonMatch[1]);
+        const detail = data?.props?.pageProps?.detailData;
+        if (detail) {
+          title = detail.name || detail.title || '';
+          content = (detail.content || '').replace(/<[^>]+>/g, '').trim();
+        }
+      } catch (e) {}
+    }
+    if (!title) {
+      const titleMatch = raw.match(/<title>([^<]+)<\/title>/);
+      title = titleMatch ? titleMatch[1] : '';
+    }
+    if (!content) {
+      content = raw.replace(/<[^>]+>/g, '').trim().slice(0, 5000);
+    }
     return {
       news: {
         id,
-        title: titleMatch ? titleMatch[1] : '',
+        title,
         url,
         source: 'pengpai',
         sourceName: '澎湃新闻',
         publishTime: Date.now(),
       },
-      content: raw.replace(/<[^>]+>/g, '').trim().slice(0, 5000),
+      content,
     };
   },
 };
@@ -72,9 +92,35 @@ const newsSearch = {
     const resp = await httpFetch(url, {
       headers: { 'User-Agent': 'Mozilla/5.0' },
     });
-    const data = resp.body as any;
-    const news = ((data?.data as any[]) || []).map(normalizeArticle);
-    return { news, total: news.length };
+    const raw = resp.raw || String(resp.body || '');
+    // 澎湃搜索返回的是 HTML 页面，从 JSON 数据块中提取
+    const jsonMatch = raw.match(/__NEXT_DATA__[^>]*>([^<]+)</);
+    let news: NewsItem[] = [];
+    if (jsonMatch) {
+      try {
+        const data = JSON.parse(jsonMatch[1]);
+        const list = (data?.props?.pageProps?.searchData?.list as any[]) || [];
+        news = list.map(normalizeArticle);
+      } catch (e) {}
+    }
+    // 如果 JSON 提取失败，尝试从 HTML 中正则匹配
+    if (news.length === 0) {
+      const titleRegex = /<a[^>]+href="\/newsDetail_forward_(\d+)"[^>]*>([^<]+)<\/a>/g;
+      let match;
+      let count = 0;
+      while ((match = titleRegex.exec(raw)) !== null && count < limit) {
+        news.push({
+          id: match[1],
+          title: match[2].trim(),
+          url: `https://www.thepaper.cn/newsDetail_forward_${match[1]}`,
+          source: 'pengpai',
+          sourceName: '澎湃新闻',
+          publishTime: Date.now(),
+        });
+        count++;
+      }
+    }
+    return { news: news.slice(0, limit), total: news.length };
   },
 };
 
