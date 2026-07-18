@@ -77,6 +77,12 @@ function setupRouter(): void {
   router.post('/api/player/register-song', playerHandlers.registerSong);
   router.post('/api/player/register-batch', playerHandlers.registerBatch);
 
+  // 宿主原生搜索 + 播放 URL 解析（官方推荐接入方式）
+  // 宿主搜索框输入关键词 → POST /api/search
+  // 宿主播放时回调 → POST /api/music/url
+  router.post('/api/search', hostSearchHandler);
+  router.post('/api/music/url', hostMusicUrlHandler);
+
   // 聚合接口 - 多平台热榜聚合（去重 + 归一化排序，带 TTL 缓存）
   router.get('/api/aggregate/hotboard', async (req) => {
     try {
