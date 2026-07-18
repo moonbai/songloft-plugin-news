@@ -11,21 +11,27 @@ import ithome from './ithome';
 import huxiu from './huxiu';
 import sspai from './sspai';
 import juejin from './juejin';
+import cctv from './cctv';
+import cnr from './cnr';
+import people from './people';
 
 export const sources = [
-  { id: 'weibo', name: '微博热搜', supportAudio: false, supportTts: true },
-  { id: 'baidu', name: '百度热搜', supportAudio: false, supportTts: true },
-  { id: 'zhihu', name: '知乎热榜', supportAudio: false, supportTts: true },
-  { id: '36kr', name: '36氪', supportAudio: false, supportTts: true },
-  { id: 'ithome', name: 'IT之家', supportAudio: false, supportTts: true },
-  { id: 'huxiu', name: '虎嗅', supportAudio: false, supportTts: true },
-  { id: 'sspai', name: '少数派', supportAudio: false, supportTts: true },
-  { id: 'juejin', name: '掘金', supportAudio: false, supportTts: true },
-  { id: 'toutiao', name: '今日头条', supportAudio: false, supportTts: true },
-  { id: 'pengpai', name: '澎湃新闻', supportAudio: false, supportTts: true },
-  { id: 'wangyi', name: '网易新闻', supportAudio: false, supportTts: true },
-  { id: 'ximalaya', name: '喜马拉雅', supportAudio: true, supportTts: false },
-  { id: 'dedao', name: '得到', supportAudio: true, supportTts: true },
+  { id: 'cctv', name: '央视新闻', supportAudio: true, supportTts: false, isOfficial: true },
+  { id: 'cnr', name: '中国之声', supportAudio: true, supportTts: false, isOfficial: true },
+  { id: 'people', name: '人民日报', supportAudio: true, supportTts: false, isOfficial: true },
+  { id: 'ximalaya', name: '喜马拉雅', supportAudio: true, supportTts: false, isOfficial: false },
+  { id: 'dedao', name: '得到', supportAudio: true, supportTts: true, isOfficial: false },
+  { id: 'weibo', name: '微博热搜', supportAudio: false, supportTts: true, isOfficial: false },
+  { id: 'baidu', name: '百度热搜', supportAudio: false, supportTts: true, isOfficial: false },
+  { id: 'zhihu', name: '知乎热榜', supportAudio: false, supportTts: true, isOfficial: false },
+  { id: '36kr', name: '36氪', supportAudio: false, supportTts: true, isOfficial: false },
+  { id: 'ithome', name: 'IT之家', supportAudio: false, supportTts: true, isOfficial: false },
+  { id: 'huxiu', name: '虎嗅', supportAudio: false, supportTts: true, isOfficial: false },
+  { id: 'sspai', name: '少数派', supportAudio: false, supportTts: true, isOfficial: false },
+  { id: 'juejin', name: '掘金', supportAudio: false, supportTts: true, isOfficial: false },
+  { id: 'toutiao', name: '今日头条', supportAudio: false, supportTts: true, isOfficial: false },
+  { id: 'pengpai', name: '澎湃新闻', supportAudio: false, supportTts: true, isOfficial: false },
+  { id: 'wangyi', name: '网易新闻', supportAudio: false, supportTts: true, isOfficial: false },
 ];
 
 export const toutiaoModule = toutiao;
@@ -41,6 +47,9 @@ export const ithomeModule = ithome;
 export const huxiuModule = huxiu;
 export const sspaiModule = sspai;
 export const juejinModule = juejin;
+export const cctvModule = cctv;
+export const cnrModule = cnr;
+export const peopleModule = people;
 
 export const platformModules: Record<string, any> = {
   toutiao,
@@ -56,6 +65,9 @@ export const platformModules: Record<string, any> = {
   huxiu,
   sspai,
   juejin,
+  cctv,
+  cnr,
+  people,
 };
 
 export default platformModules;

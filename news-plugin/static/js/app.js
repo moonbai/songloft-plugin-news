@@ -960,7 +960,23 @@ async function loadNewsPanel() {
   const sourcesResp = await api('/sources');
   const sources = sourcesResp.data || [];
   const sourceSelect = document.getElementById('newsSource');
-  sourceSelect.innerHTML = sources.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+  
+  // 按类型分组：音频源和文字源
+  const audioSources = sources.filter(s => s.supportAudio);
+  const textSources = sources.filter(s => !s.supportAudio);
+  
+  let html = '';
+  if (audioSources.length > 0) {
+    html += '<optgroup label="🎧 音频源">';
+    html += audioSources.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+    html += '</optgroup>';
+  }
+  if (textSources.length > 0) {
+    html += '<optgroup label="📰 文字源">';
+    html += textSources.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+    html += '</optgroup>';
+  }
+  sourceSelect.innerHTML = html;
   
   if (sources.length > 0) {
     sourceSelect.value = sources[0].id;

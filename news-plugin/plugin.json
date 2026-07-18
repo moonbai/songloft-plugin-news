@@ -19,6 +19,6 @@
   "homepage": "https://github.com/moonbai/songloft-plugin-news",
   "updateUrl": "https://github.com/moonbai/songloft-plugin-news/raw/main/news-plugin/plugin.json",
   "download_url": "https://github.com/moonbai/songloft-plugin-news/releases/download/v1.3.15/news.jsplugin.zip",
-  "entryHash": "1c009cdfee663e1654ba3104612fd83c1e87d0f0fd899c09ff2dffd2fa6c9f41",
-  "zipHash": "7c7a2c5ffd006444f89303174c5fe604f03ee757eb37025cc60f5e177a81d47d"
+  "entryHash": "7709f352e276abfb5ddbe1636ab81b5763dd3e4af80ed33465ee940c0acac731",
+  "zipHash": "4989e1c4b4d00bfe5160fd79852198db757f5f21f6bbf3c2fe106ee0afae71eb"
 }
