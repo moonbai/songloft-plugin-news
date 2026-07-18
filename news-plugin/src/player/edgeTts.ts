@@ -1,19 +1,20 @@
-// 在线 TTS 后端客户端 - 使用 HTTP-based TTS 服务生成音频
+// 在线 TTS 后端客户端 - 使用百度翻译 TTS 服务生成音频
 //
 // QuickJS 运行时不支持 WebSocket 全局，因此不能用 Edge TTS 的 WebSocket 协议。
-// 改用 HTTP-based TTS 服务：
-//   1. 优先 Google Translate TTS（质量较好，支持 zh-CN）
-//   2. 失败回退有道 TTS（国内可访问）
+// Google TTS 在国内被墙，有道 TTS 接口已失效（HTTP 688/500）。
+// 改用百度翻译 TTS（fanyi.baidu.com/gettts），国内访问稳定，支持长文本。
 //
-// 长文本会按句子边界分割为短块，分别合成后拼接 MP3 字节流。
+// 接口：GET https://fanyi.baidu.com/gettts?lan=zh&text={text}&spd=3&source=web
+// 返回：audio/mpeg (MP3)
+// 限制：单次请求建议不超过 ~500 字符，超长文本会按句子切分后拼接。
 
-const GOOGLE_TTS_URL = 'https://translate.google.com/translate_tts';
-const YOUDAO_TTS_URL = 'https://tts.youdao.com/fanyivoice';
-const MAX_CHUNK_LENGTH = 180;
+const BAIDU_TTS_URL = 'https://fanyi.baidu.com/gettts';
+const MAX_CHUNK_LENGTH = 200; // 百度 TTS 单次请求安全长度
 
 const DEFAULT_HEADERS: Record<string, string> = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
   'Accept': 'audio/mpeg,audio/*,*/*;q=0.9',
+  'Referer': 'https://fanyi.baidu.com/',
 };
 
 export interface EdgeTtsConfig {
@@ -24,14 +25,14 @@ export interface EdgeTtsConfig {
 }
 
 /**
- * 将长文本按句子边界分割为适合 TTS 接口的短文本（每次最多 ~180 字）
+ * 将长文本按句子边界分割为适合 TTS 接口的短文本
+ * 按。！？.!?;；\n 切分，保留分隔符，单块不超过 maxLen
  */
 function splitText(text: string, maxLen: number): string[] {
   if (!text) return [];
   if (text.length <= maxLen) return [text];
 
   const chunks: string[] = [];
-  // 按中英文句号、问号、叹号、分号、换行分割，保留分隔符
   const parts = text.split(/([。！？.!?;；\n])/g);
   let current = '';
 
@@ -56,34 +57,29 @@ function splitText(text: string, maxLen: number): string[] {
   return chunks;
 }
 
-async function fetchAudioBuffer(url: string): Promise<Uint8Array> {
+/**
+ * 调用百度翻译 TTS 获取单个 chunk 的音频
+ * spd: 语速（0-5，3=正常，配置 rate 越大语速越快）
+ */
+async function baiduTts(text: string, rate: number): Promise<Uint8Array> {
+  // rate 1.0 -> spd 3; rate 1.5 -> spd 5; rate 0.5 -> spd 1
+  const spd = Math.max(1, Math.min(7, Math.round(rate * 3)));
+  const params = new URLSearchParams();
+  params.set('lan', 'zh');
+  params.set('text', text);
+  params.set('spd', String(spd));
+  params.set('source', 'web');
+  const url = BAIDU_TTS_URL + '?' + params.toString();
+
   const resp = await fetch(url, { method: 'GET', headers: DEFAULT_HEADERS });
   if (!resp.ok) {
-    throw new Error('HTTP ' + resp.status + ' from ' + url.slice(0, 60));
+    throw new Error('HTTP ' + resp.status);
   }
   const ab = await resp.arrayBuffer();
   if (!ab || ab.byteLength === 0) {
-    throw new Error('Empty audio response from ' + url.slice(0, 60));
+    throw new Error('Empty audio response');
   }
   return new Uint8Array(ab);
-}
-
-async function googleTts(text: string): Promise<Uint8Array> {
-  const params = new URLSearchParams();
-  params.set('ie', 'UTF-8');
-  params.set('q', text);
-  params.set('tl', 'zh-CN');
-  params.set('client', 'tw-ob');
-  const url = GOOGLE_TTS_URL + '?' + params.toString();
-  return fetchAudioBuffer(url);
-}
-
-async function youdaoTts(text: string): Promise<Uint8Array> {
-  const params = new URLSearchParams();
-  params.set('word', text);
-  params.set('le', 'zh');
-  const url = YOUDAO_TTS_URL + '?' + params.toString();
-  return fetchAudioBuffer(url);
 }
 
 function concatBuffers(buffers: Uint8Array[]): Uint8Array {
@@ -98,45 +94,37 @@ function concatBuffers(buffers: Uint8Array[]): Uint8Array {
 }
 
 /**
- * 使用在线 TTS 服务合成音频
- * 优先 Google Translate TTS，失败回退有道 TTS
+ * 使用百度翻译 TTS 合成音频
+ * 长文本按句子切分后分别合成，再拼接 MP3 字节流
  */
 export async function synthesizeToBuffer(text: string, config: EdgeTtsConfig = {}): Promise<Uint8Array> {
+  const rate = config.rate ?? 1.0;
   const chunks = splitText(text, MAX_CHUNK_LENGTH);
   if (chunks.length === 0) {
     throw new Error('No text to synthesize');
   }
 
-  songloft.log.info('TTS: synthesizing ' + chunks.length + ' chunks, total ' + text.length + ' chars');
+  songloft.log.info('TTS: synthesizing ' + chunks.length + ' chunks, total ' + text.length + ' chars, rate=' + rate);
 
-  const strategies = [
-    { name: 'google', fn: googleTts },
-    { name: 'youdao', fn: youdaoTts },
-  ];
-
-  const errors: string[] = [];
-  for (const strategy of strategies) {
-    try {
-      const buffers: Uint8Array[] = [];
-      for (const chunk of chunks) {
-        const buf = await strategy.fn(chunk);
-        if (buf && buf.length > 0) {
-          buffers.push(buf);
-        }
+  try {
+    const buffers: Uint8Array[] = [];
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      songloft.log.info('TTS: chunk ' + (i + 1) + '/' + chunks.length + ' len=' + chunk.length);
+      const buf = await baiduTts(chunk, rate);
+      if (buf && buf.length > 0) {
+        buffers.push(buf);
       }
-      if (buffers.length > 0) {
-        songloft.log.info('TTS: ' + strategy.name + ' succeeded, ' + buffers.length + ' chunks, ' + buffers.reduce((s, b) => s + b.length, 0) + ' bytes');
-        return concatBuffers(buffers);
-      }
-      errors.push(strategy.name + ': no audio data');
-    } catch (e) {
-      const msg = strategy.name + ': ' + (e as Error).message;
-      errors.push(msg);
-      songloft.log.warn('TTS: ' + msg);
     }
+    if (buffers.length === 0) {
+      throw new Error('No audio data received from Baidu TTS');
+    }
+    const total = buffers.reduce((s, b) => s + b.length, 0);
+    songloft.log.info('TTS: baidu succeeded, ' + buffers.length + ' chunks, ' + total + ' bytes');
+    return concatBuffers(buffers);
+  } catch (e) {
+    throw new Error('Baidu TTS failed: ' + (e as Error).message);
   }
-
-  throw new Error('All TTS strategies failed: ' + errors.join('; '));
 }
 
 // 简单的 TTS 缓存（按文本内容 hash 缓存，避免重复生成）
