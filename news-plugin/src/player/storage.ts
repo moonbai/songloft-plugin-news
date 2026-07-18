@@ -25,6 +25,7 @@ export interface TtsConfig {
   volume: number;
   autoPlayNext: boolean;
   enableTts: boolean;
+  useEdgeTts: boolean;
 }
 
 export function getDefaultTtsConfig(): TtsConfig {
@@ -35,6 +36,7 @@ export function getDefaultTtsConfig(): TtsConfig {
     volume: 1.0,
     autoPlayNext: true,
     enableTts: true,
+    useEdgeTts: true,
   };
 }
 

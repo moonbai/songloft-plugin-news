@@ -230,6 +230,21 @@ input:checked + .slider:before { transform: translateX(18px); }
 .modal-actions button#dialog-cancel { background: var(--news-surface-variant); color: var(--news-on-surface-variant); }
 .danger-btn { background: var(--news-error) !important; color: var(--news-on-primary) !important; border: none !important; cursor: pointer; padding: 6px 12px; border-radius: 4px; }
 
+/* 设置卡片 */
+.settings-card { background: var(--news-surface); border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+.settings-card h3 { margin: 0 0 16px 0; font-size: 16px; color: var(--news-on-surface); }
+.settings-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--news-surface-variant); gap: 16px; }
+.settings-row:last-of-type { border-bottom: none; }
+.settings-row label { font-size: 14px; color: var(--news-on-surface); flex: 1; }
+.settings-row .value-label { color: var(--news-primary); font-weight: 600; margin-left: 8px; min-width: 40px; display: inline-block; }
+.settings-row input[type="range"] { flex: 1; max-width: 200px; accent-color: var(--news-primary); }
+.settings-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--news-primary); cursor: pointer; }
+.settings-row select { padding: 6px 12px; border: 1px solid var(--news-outline); border-radius: 4px; background: var(--news-surface); color: var(--news-on-surface); font-size: 14px; max-width: 220px; flex: 1; }
+.settings-row .btn { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; background: var(--news-surface-variant); color: var(--news-on-surface); }
+.settings-row .btn.btn-primary { background: var(--news-primary); color: var(--news-on-primary); }
+.settings-row .btn:hover { opacity: 0.9; }
+.settings-tip { margin-top: 16px; padding: 12px; background: var(--news-surface-container); border-radius: 6px; font-size: 12px; color: var(--news-on-surface-variant); line-height: 1.6; }
+
 /* 播放器面板 */
 .player-panel {
   position: fixed; bottom: 0; left: 0; right: 0;

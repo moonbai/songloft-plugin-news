@@ -338,6 +338,8 @@ export function createPlayerHandlers() {
         const newsList = (parsed.newsList || parsed.news || []) as NewsItem[];
         const playlistId = parsed.playlistId ? Number(parsed.playlistId) : null;
 
+        songloft.log.info('registerBatch: newsList=' + newsList.length + ', playlistId=' + playlistId);
+
         if (!Array.isArray(newsList) || newsList.length === 0) {
           return badRequestResponse('newsList is required and must be non-empty');
         }
@@ -354,6 +356,8 @@ export function createPlayerHandlers() {
           else skipped.push({ id: n?.id || '', title: n?.title || '', reason: 'invalid' });
         }
 
+        songloft.log.info('registerBatch: inputs=' + inputs.length + ', skipped=' + skipped.length);
+
         if (inputs.length === 0) {
           return successResponse({ created: 0, added: 0, skippedCount: skipped.length, skippedItems: skipped });
         }
@@ -361,25 +365,30 @@ export function createPlayerHandlers() {
         let songs: Song[];
         try {
           songs = await songloft.songs.create(inputs);
+          songloft.log.info('registerBatch: songs.create returned ' + songs.length + ' songs');
         } catch (hostErr) {
-          songloft.log.warn('songs.create failed: ' + (hostErr as Error).message);
+          songloft.log.error('registerBatch: songs.create failed: ' + (hostErr as Error).message);
           return errorResponse('宿主歌曲创建失败: ' + (hostErr as Error).message);
         }
         const songIds = songs.map(s => s.id);
+        songloft.log.info('registerBatch: songIds=' + JSON.stringify(songIds.slice(0, 5)) + '...');
 
         // 未指定歌单时，自动创建/复用「新闻资讯」歌单
         let targetPlaylistId = playlistId;
         if (!targetPlaylistId && songIds.length > 0) {
           try {
             const allPlaylists = await songloft.playlists.list();
+            songloft.log.info('registerBatch: allPlaylists count=' + allPlaylists.length);
             const radioPlaylists = allPlaylists.filter((p: any) => p.type === 'radio' || !p.type);
             let target = radioPlaylists.find((p: any) => p.name === '新闻资讯');
             if (!target) {
               target = await songloft.playlists.create({ name: '新闻资讯', type: 'radio' as any });
+              songloft.log.info('registerBatch: created new playlist id=' + (target as any).id);
             }
             targetPlaylistId = (target as any).id;
             songloft.log.info('registerBatch: auto-create/use playlist id=' + targetPlaylistId);
           } catch (e) {
+            songloft.log.error('registerBatch: playlist setup failed: ' + (e as Error).message);
             return errorResponse('无法创建/获取新闻歌单: ' + (e as Error).message);
           }
         }
@@ -390,9 +399,10 @@ export function createPlayerHandlers() {
           try {
             const result = await songloft.playlists.addSongs(targetPlaylistId, songIds);
             added = result.added;
+            songloft.log.info('registerBatch: addSongs added=' + added + ', skipped=' + result.skipped);
           } catch (e) {
             addError = (e as Error).message;
-            songloft.log.error('add to playlist failed: ' + addError);
+            songloft.log.error('registerBatch: addSongs failed: ' + addError);
           }
         } else if (!playlistId) {
           addError = '未指定目标歌单';
@@ -407,6 +417,7 @@ export function createPlayerHandlers() {
           skippedItems: skipped,
         });
       } catch (e) {
+        songloft.log.error('registerBatch: unexpected error: ' + (e as Error).message);
         return errorResponse('Register batch failed: ' + (e as Error).message);
       }
     },

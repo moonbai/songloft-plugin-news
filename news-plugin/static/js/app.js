@@ -801,7 +801,10 @@ async function importNewsToHost(newsItems) {
       newsList: newsItems,
       playlistId: targetPlaylistId,
     }),
+    timeout: 60000, // 批量导入给 60s
   });
+
+  console.log('[import] register-batch result:', result);
 
   if (result.code !== 0) {
     throw new Error(result.msg || '导入失败');
@@ -1578,19 +1581,34 @@ async function initImportUI() {
 
   if (btnBatchImport) {
     btnBatchImport.addEventListener('click', async function () {
-      const result = await api('/player/playable?limit=30');
-      if (result.code !== 0 || !result.data?.news || result.data.news.length === 0) {
-        showSnack('暂无可导入的新闻', 'info');
+      // 先检查是否选中了歌单
+      if (!targetPlaylistId) {
+        showSnack('请先选择目标歌单', 'error');
         return;
       }
-      const newsItems = result.data.news;
       btnBatchImport.disabled = true;
-      btnBatchImport.innerHTML = '<span>⏳ 导入中...</span>';
+      btnBatchImport.innerHTML = '<span>⏳ 加载新闻中...</span>';
       try {
+        const result = await api('/player/playable?limit=30', { timeout: 30000 });
+        if (result.code !== 0 || !result.data?.news || result.data.news.length === 0) {
+          showSnack('暂无可导入的新闻: ' + (result.msg || ''), 'info');
+          return;
+        }
+        const newsItems = result.data.news;
+        console.log('[import] got ' + newsItems.length + ' news items');
+
+        btnBatchImport.innerHTML = '<span>⏳ 导入中...</span>';
         await loadPlaylists();
         const importResult = await importNewsToHost(newsItems);
+        console.log('[import] result:', importResult);
         showImportResult(importResult.created, importResult.added, importResult.skipped);
+        if (importResult.addError) {
+          showSnack('部分失败: ' + importResult.addError, 'error');
+        } else if (importResult.created > 0) {
+          showSnack('成功导入 ' + importResult.created + ' 条新闻', 'success');
+        }
       } catch (e) {
+        console.error('[import] batch import failed:', e);
         showSnack('批量导入失败: ' + (e && e.message ? e.message : String(e)), 'error');
       } finally {
         btnBatchImport.disabled = false;
@@ -1601,6 +1619,128 @@ async function initImportUI() {
 }
 
 window.songloftToast = showToast;
+
+// ============ TTS 设置 ============
+function initSettingsUI() {
+  const ttsEnable = document.getElementById('ttsEnable');
+  const ttsUseEdge = document.getElementById('ttsUseEdge');
+  const ttsRate = document.getElementById('ttsRate');
+  const ttsPitch = document.getElementById('ttsPitch');
+  const ttsVolume = document.getElementById('ttsVolume');
+  const ttsVoice = document.getElementById('ttsVoice');
+  const ttsRateValue = document.getElementById('ttsRateValue');
+  const ttsPitchValue = document.getElementById('ttsPitchValue');
+  const ttsVolumeValue = document.getElementById('ttsVolumeValue');
+  const ttsTestBtn = document.getElementById('ttsTestBtn');
+  const ttsSaveBtn = document.getElementById('ttsSaveBtn');
+
+  if (!ttsRate) return;
+
+  // 从 player 加载当前配置
+  function loadConfigToUI() {
+    if (!player) return;
+    const cfg = player.getTtsConfig();
+    ttsEnable.checked = cfg.enableTts !== false;
+    ttsUseEdge.checked = cfg.useEdgeTts !== false;
+    ttsRate.value = cfg.rate || 1.0;
+    ttsPitch.value = cfg.pitch || 1.0;
+    ttsVolume.value = Math.round((cfg.volume != null ? cfg.volume : 1.0) * 100);
+    ttsRateValue.textContent = Number(ttsRate.value).toFixed(1) + 'x';
+    ttsPitchValue.textContent = Number(ttsPitch.value).toFixed(1);
+    ttsVolumeValue.textContent = ttsVolume.value + '%';
+    // 选中当前 voice
+    if (cfg.voice) {
+      const opt = Array.from(ttsVoice.options).find(o => o.value === cfg.voice);
+      if (opt) ttsVoice.value = cfg.voice;
+    }
+  }
+
+  // 加载浏览器可用 voice
+  function loadBrowserVoices() {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+    const voices = window.speechSynthesis.getVoices() || [];
+    const zhVoices = voices.filter(v => /^zh/i.test(v.lang) || /chinese/i.test(v.name));
+    if (zhVoices.length === 0) return;
+    // 保留"中文（自动）"选项
+    const currentValue = ttsVoice.value;
+    ttsVoice.innerHTML = '<option value="zh-CN">中文（自动）</option>';
+    zhVoices.forEach(v => {
+      const opt = document.createElement('option');
+      opt.value = v.name;
+      opt.textContent = v.name + ' (' + v.lang + ')';
+      ttsVoice.appendChild(opt);
+    });
+    ttsVoice.value = currentValue;
+  }
+
+  // 滑块实时显示
+  ttsRate.addEventListener('input', () => {
+    ttsRateValue.textContent = Number(ttsRate.value).toFixed(1) + 'x';
+  });
+  ttsPitch.addEventListener('input', () => {
+    ttsPitchValue.textContent = Number(ttsPitch.value).toFixed(1);
+  });
+  ttsVolume.addEventListener('input', () => {
+    ttsVolumeValue.textContent = ttsVolume.value + '%';
+  });
+
+  // 保存
+  ttsSaveBtn.addEventListener('click', () => {
+    if (!player) {
+      showSnack('播放器未初始化', 'error');
+      return;
+    }
+    const config = {
+      enableTts: ttsEnable.checked,
+      useEdgeTts: ttsUseEdge.checked,
+      rate: Number(ttsRate.value),
+      pitch: Number(ttsPitch.value),
+      volume: Number(ttsVolume.value) / 100,
+      voice: ttsVoice.value,
+    };
+    player.setTtsConfig(config);
+    showSnack('设置已保存', 'success');
+  });
+
+  // 试听
+  ttsTestBtn.addEventListener('click', async () => {
+    if (!player) {
+      showSnack('播放器未初始化', 'error');
+      return;
+    }
+    ttsTestBtn.disabled = true;
+    ttsTestBtn.textContent = '⏳ 生成中...';
+    // 临时应用配置（不保存）
+    const tempConfig = {
+      enableTts: true,
+      useEdgeTts: ttsUseEdge.checked,
+      rate: Number(ttsRate.value),
+      pitch: Number(ttsPitch.value),
+      volume: Number(ttsVolume.value) / 100,
+      voice: ttsVoice.value,
+    };
+    player.setTtsConfig(tempConfig);
+    try {
+      await player.playOne({
+        title: 'TTS 试听',
+        summary: '这是语音朗读的测试，当前语速 ' + Number(ttsRate.value).toFixed(1) + ' 倍。',
+        audioUrl: null,
+      });
+    } catch (e) {
+      showSnack('试听失败: ' + (e && e.message ? e.message : String(e)), 'error');
+    } finally {
+      ttsTestBtn.disabled = false;
+      ttsTestBtn.textContent = '🔊 试听';
+    }
+  });
+
+  // 初始加载
+  loadConfigToUI();
+  loadBrowserVoices();
+  if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+    window.speechSynthesis.addEventListener('voiceschanged', loadBrowserVoices);
+  }
+}
 
 function init() {
   try {
@@ -1614,6 +1754,11 @@ function init() {
     initImportUI();
   } catch (e) {
     console.error('[init] initImportUI failed:', e);
+  }
+  try {
+    initSettingsUI();
+  } catch (e) {
+    console.error('[init] initSettingsUI failed:', e);
   }
   loadHotboard().catch(e => console.error('[init] loadHotboard failed:', e));
 }

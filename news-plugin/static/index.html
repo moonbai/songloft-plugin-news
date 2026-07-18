@@ -16,6 +16,7 @@
         <button class="tab" data-tab="player">可播放</button>
         <button class="tab" data-tab="playlist">播放列表</button>
         <button class="tab" data-tab="search">搜索</button>
+        <button class="tab" data-tab="settings">设置</button>
       </nav>
     </header>
 
@@ -99,6 +100,50 @@
           </div>
         </div>
         <div id="playlistList" class="news-list"></div>
+      </section>
+
+      <!-- 设置 -->
+      <section class="panel" id="panel-settings">
+        <div class="toolbar">
+          <h2>⚙️ 设置</h2>
+        </div>
+        <div class="settings-card">
+          <h3>语音朗读</h3>
+          <div class="settings-row">
+            <label for="ttsEnable">启用 TTS 朗读</label>
+            <input type="checkbox" id="ttsEnable">
+          </div>
+          <div class="settings-row">
+            <label for="ttsUseEdge">优先使用在线 TTS（推荐）</label>
+            <input type="checkbox" id="ttsUseEdge">
+          </div>
+          <div class="settings-row">
+            <label for="ttsRate">语速 <span id="ttsRateValue" class="value-label">1.0x</span></label>
+            <input type="range" id="ttsRate" min="0.5" max="2.0" step="0.1" value="1.0">
+          </div>
+          <div class="settings-row">
+            <label for="ttsPitch">音调 <span id="ttsPitchValue" class="value-label">1.0</span></label>
+            <input type="range" id="ttsPitch" min="0.5" max="2.0" step="0.1" value="1.0">
+          </div>
+          <div class="settings-row">
+            <label for="ttsVolume">音量 <span id="ttsVolumeValue" class="value-label">100%</span></label>
+            <input type="range" id="ttsVolume" min="0" max="100" step="5" value="100">
+          </div>
+          <div class="settings-row">
+            <label for="ttsVoice">浏览器 TTS 音色（仅浏览器 TTS 生效）</label>
+            <select id="ttsVoice">
+              <option value="zh-CN">中文（自动）</option>
+            </select>
+          </div>
+          <div class="settings-row">
+            <button id="ttsTestBtn" class="btn">🔊 试听</button>
+            <button id="ttsSaveBtn" class="btn btn-primary">保存设置</button>
+          </div>
+          <div class="settings-tip">
+            在线 TTS 使用百度翻译语音合成，音色固定为中文女声。<br>
+            浏览器 TTS（如系统支持）可选择不同音色。
+          </div>
+        </div>
       </section>
 
     </main>
