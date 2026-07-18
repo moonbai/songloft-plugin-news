@@ -17,6 +17,7 @@ import {
 import type { SearchResultItem } from '@songloft/plugin-sdk';
 import { platformModules } from '../newsSdk/facade';
 import type { NewsItem } from '../types';
+import { buildBaiduTtsUrl } from '../utils/tts';
 
 // 只在这些源里搜可播放内容（有音频的 + 支持TTS的）
 const PLAYABLE_SOURCES = ['cctv', 'cnr', 'people', 'ximalaya', 'dedao', 'weibo', 'zhihu', 'baidu', '36kr', 'ithome', 'huxiu', 'sspai', 'juejin'];
@@ -67,10 +68,8 @@ function newsToSearchResult(n: NewsItem): SearchResultItem {
   // 估算时长：中文约240字/分钟
   const estimatedDuration = isTts ? Math.ceil(ttsText.length / 240 * 60) : (n.audioDuration || 0);
 
-  // TTS 模式直接生成有道 URL
-  const ttsUrl = isTts
-    ? 'https://dict.youdao.com/dictvoice?audio=' + encodeURIComponent(ttsText) + '&type=1'
-    : undefined;
+  // TTS 模式直接生成百度 TTS URL（不校验 Referer，App 端可用）
+  const ttsUrl = isTts ? buildBaiduTtsUrl(ttsText) : undefined;
 
   return {
     title: n.title,
@@ -152,9 +151,7 @@ export const hostMusicUrlHandler = createMusicUrlHandler({
       }
       if (sd.ttsText) {
         const text = sd.ttsText.slice(0, 200);
-        const ttsUrl = 'https://dict.youdao.com/dictvoice?audio=' +
-          encodeURIComponent(text) + '&type=1';
-        return { url: ttsUrl };
+        return { url: buildBaiduTtsUrl(text) };
       }
     }
 

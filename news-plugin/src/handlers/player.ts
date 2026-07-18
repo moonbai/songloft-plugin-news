@@ -3,6 +3,7 @@ import { parseQuery } from '@songloft/plugin-sdk';
 import type { HTTPRequest, CreateSongInput, Song } from '@songloft/plugin-sdk';
 import { platformModules } from '../newsSdk/facade';
 import { successResponse, errorResponse, badRequestResponse, parseJsonBody } from './response';
+import { buildBaiduTtsUrl } from '../utils/tts';
 import {
   getPlaylists, addToPlaylist, removeFromPlaylist, clearPlaylist,
   getTtsConfig, setTtsConfig,
@@ -41,10 +42,8 @@ function newsToSongInput(news: NewsItem): CreateSongInput | null {
   // 估算时长：中文约240字/分钟
   const estimatedDuration = isTts ? Math.ceil(ttsText.length / 240 * 60) : (news.audioDuration || 0);
 
-  // TTS 模式：直接生成有道 URL，宿主可直接播放
-  const url = isTts
-    ? 'https://dict.youdao.com/dictvoice?audio=' + encodeURIComponent(ttsText) + '&type=1'
-    : (news.audioUrl || '');
+  // TTS 模式：直接生成百度 TTS URL（不校验 Referer，App 端可用）
+  const url = isTts ? buildBaiduTtsUrl(ttsText) : (news.audioUrl || '');
 
   const sourceData = JSON.stringify({
     newsId,
@@ -339,14 +338,37 @@ export function createPlayerHandlers() {
           return successResponse({ created: 0, added: 0, skippedCount: skipped.length, skippedItems: skipped });
         }
 
-        const songs: Song[] = await songloft.songs.create(inputs);
+        let songs: Song[];
+        try {
+          songs = await songloft.songs.create(inputs);
+        } catch (hostErr) {
+          songloft.log.warn('songs.create failed: ' + (hostErr as Error).message);
+          return errorResponse('宿主歌曲创建失败: ' + (hostErr as Error).message);
+        }
         const songIds = songs.map(s => s.id);
+
+        // 未指定歌单时，自动创建/复用「新闻资讯」歌单
+        let targetPlaylistId = playlistId;
+        if (!targetPlaylistId && songIds.length > 0) {
+          try {
+            const allPlaylists = await songloft.playlists.list();
+            const radioPlaylists = allPlaylists.filter((p: any) => p.type === 'radio' || !p.type);
+            let target = radioPlaylists.find((p: any) => p.name === '新闻资讯');
+            if (!target) {
+              target = await songloft.playlists.create({ name: '新闻资讯', type: 'radio' as any });
+            }
+            targetPlaylistId = (target as any).id;
+            songloft.log.info('registerBatch: auto-create/use playlist id=' + targetPlaylistId);
+          } catch (e) {
+            return errorResponse('无法创建/获取新闻歌单: ' + (e as Error).message);
+          }
+        }
 
         let added = 0;
         let addError = '';
-        if (playlistId && songIds.length > 0) {
+        if (targetPlaylistId && songIds.length > 0) {
           try {
-            const result = await songloft.playlists.addSongs(playlistId, songIds);
+            const result = await songloft.playlists.addSongs(targetPlaylistId, songIds);
             added = result.added;
           } catch (e) {
             addError = (e as Error).message;

@@ -9,6 +9,7 @@ import { sources, platformModules } from './newsSdk/facade';
 import { createSearchHandlers, createNewsHandlers, createSourceHandlers, createPlayerHandlers } from './handlers';
 import { hostSearchHandler, hostMusicUrlHandler } from './handlers/host';
 import { getAggregatedHotboard } from './aggregate';
+import { buildBaiduTtsUrl } from './utils/tts';
 
 let router: ReturnType<typeof createRouter> | null = null;
 let runtimeManager: RuntimeManager | null = null;
@@ -81,32 +82,17 @@ function setupRouter(): void {
   router.post('/api/player/register-song', playerHandlers.registerSong);
   router.post('/api/player/register-batch', playerHandlers.registerBatch);
 
-  // TTS 在线音频 - 返回有道TTS音频URL，前端audio标签直接加载
-  // 有道TTS更稳定，无Referer限制，支持GET直接访问
+  // TTS 在线音频 - 返回百度TTS音频URL，前端audio标签直接加载
+  // 百度TTS不校验Referer，App原生播放器也能正常播放
   router.get('/api/player/tts-audio', async (req) => {
     try {
       const query = parseQuery(req.query);
       const text = String(query.text || '');
       if (!text) return jsonResponse({ code: 400, msg: 'text is required' }, 400);
 
-      // 有道TTS单次限制约400字符，截断处理
-      const truncated = text.slice(0, 400);
-      const ttsUrl = 'https://dict.youdao.com/dictvoice?audio=' +
-        encodeURIComponent(truncated) + '&type=1';
-
-      // 验证URL可达性
-      const resp = await fetch(ttsUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        },
-      });
-
-      if (!resp.ok) {
-        songloft.log.error('TTS service returned: ' + resp.status);
-        return jsonResponse({ code: 502, msg: 'TTS service unavailable' }, 502);
-      }
-
-      await resp.text();
+      // 百度TTS单次限制约200字符，截断处理
+      const truncated = text.slice(0, 200);
+      const ttsUrl = buildBaiduTtsUrl(truncated);
 
       return jsonResponse({
         code: 0,

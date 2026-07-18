@@ -19,6 +19,9 @@ const PLATFORM_CONFIG: Record<string, {
   wangyi:    { weight: 0.7,  category: 'news',     enabled: true  },
   ximalaya:  { weight: 0.5,  category: 'audio',    enabled: false },
   dedao:     { weight: 0.5,  category: 'knowledge', enabled: false },
+  cctv:      { weight: 0.85, category: 'audio',    enabled: true  },
+  cnr:       { weight: 0.8,  category: 'audio',    enabled: true  },
+  people:    { weight: 0.8,  category: 'audio',    enabled: true  },
 };
 
 const CATEGORY_NAMES: Record<string, string> = {

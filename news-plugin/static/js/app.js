@@ -289,14 +289,28 @@ class NewsPlayer {
   }
 
   /**
-   * 播放单段TTS音频（直接构建有道TTS URL，audio标签直接加载）
+   * 构建百度TTS URL（不校验Referer，App端可用）
+   */
+  _buildBaiduTtsUrl(text) {
+    return 'https://tts.baidu.com/text2audio'
+      + '?tex=' + encodeURIComponent(text)
+      + '&cuid=baike'
+      + '&lan=ZH'
+      + '&ctp=1'
+      + '&pdt=301'
+      + '&vol=9'
+      + '&rate=5'
+      + '&per=0';
+  }
+
+  /**
+   * 播放单段TTS音频（直接构建百度TTS URL，audio标签直接加载）
    */
   async _playTtsChunk(text) {
     const cleanText = this._cleanTtsText(text).slice(0, 200);
     if (!cleanText) return;
 
-    const ttsUrl = 'https://dict.youdao.com/dictvoice?audio=' +
-      encodeURIComponent(cleanText) + '&type=1';
+    const ttsUrl = this._buildBaiduTtsUrl(cleanText);
 
     return new Promise((resolve) => {
       this.audio.src = ttsUrl;
