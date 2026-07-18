@@ -78,26 +78,71 @@ class NewsPlayer {
    * 检测浏览器 TTS 能力
    * - 必须支持 SpeechSynthesis API
    * - 必须有可用语音（部分 WebView/桌面端有 API 但无语音）
-   * - voices 可能异步加载，最多等 1.5s
+   * - voices 可能异步加载，最多等 3s
    */
   _ttsAvailable() {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return false;
-    if (typeof SpeechSynthesisUtterance === 'undefined') return false;
-    const voices = window.speechSynthesis.getVoices();
-    return voices.length > 0;
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      console.warn('[TTS] speechSynthesis API not available');
+      return false;
+    }
+    if (typeof SpeechSynthesisUtterance === 'undefined') {
+      console.warn('[TTS] SpeechSynthesisUtterance not available');
+      return false;
+    }
+    try {
+      const voices = window.speechSynthesis.getVoices();
+      console.log('[TTS] voices count:', voices.length);
+      if (voices.length === 0) return false;
+      // 列出前几个 voice 帮助诊断
+      voices.slice(0, 5).forEach((v, i) => {
+        console.log(`[TTS] voice[${i}]: lang=${v.lang} name=${v.name}`);
+      });
+      return true;
+    } catch (e) {
+      console.warn('[TTS] getVoices error:', e);
+      return false;
+    }
   }
 
-  _waitForVoices(timeoutMs = 1500) {
+  /**
+   * 自动选择中文 voice（避免默认非中文 voice 导致无声）
+   */
+  _pickChineseVoice() {
+    try {
+      const voices = window.speechSynthesis.getVoices();
+      if (!voices || voices.length === 0) return null;
+      // 优先级：zh-CN > zh-* > 任何 zh
+      const zhCN = voices.find(v => /zh[-_]?CN/i.test(v.lang));
+      if (zhCN) return zhCN;
+      const zhAny = voices.find(v => /^zh/i.test(v.lang));
+      if (zhAny) return zhAny;
+      // 部分系统中文 voice 用 'cmn' 标识
+      const cmn = voices.find(v => /^cmn/i.test(v.lang) || /chinese/i.test(v.name));
+      if (cmn) return cmn;
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  _waitForVoices(timeoutMs = 3000) {
     return new Promise((resolve) => {
       if (this._ttsAvailable()) return resolve(true);
       let done = false;
       const finish = (ok) => { if (!done) { done = true; resolve(ok); } };
       const timer = setTimeout(() => finish(this._ttsAvailable()), timeoutMs);
       try {
-        window.speechSynthesis.onvoiceschanged = () => {
-          clearTimeout(timer);
-          finish(this._ttsAvailable());
+        // 使用 addEventListener 避免覆盖其他回调
+        const handler = () => {
+          if (this._ttsAvailable()) {
+            clearTimeout(timer);
+            window.speechSynthesis.removeEventListener('voiceschanged', handler);
+            finish(true);
+          }
         };
+        window.speechSynthesis.addEventListener('voiceschanged', handler);
+        // 同时保留 onvoiceschanged 以兼容旧 WebView
+        window.speechSynthesis.onvoiceschanged = handler;
       } catch (e) {
         clearTimeout(timer);
         finish(false);
@@ -193,7 +238,7 @@ class NewsPlayer {
       });
 
       if (result.code !== 0) {
-        songloftToast && songloftToast('加载失败', 'error');
+        songloftToast && songloftToast('加载失败: ' + (result.msg || '未知错误'), 'error');
         return;
       }
 
@@ -206,16 +251,52 @@ class NewsPlayer {
       this.isPlaying = true;
       this._emit('play', { item: this.currentItem, mode: 'tts' });
 
-      // 在线 TTS（百度TTS）已失效，直接使用浏览器原生 speechSynthesis
-      // 等待 voices 异步加载完成
-      await this._waitForVoices(1500);
-      if (this._ttsAvailable()) {
-        await this._speakSegments(ttsScript);
-      } else {
-        songloftToast && songloftToast('当前环境不支持语音朗读（需浏览器 speechSynthesis）', 'error');
+      // 检查 speechSynthesis API
+      if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+        songloftToast && songloftToast('当前环境不支持语音朗读（无 speechSynthesis API）', 'error');
+        this._openOriginalUrl(news);
+        return;
       }
+
+      // 等待 voices 异步加载完成（最多 3 秒）
+      console.log('[TTS] waiting for voices...');
+      const ok = await this._waitForVoices(3000);
+      console.log('[TTS] voices ready:', ok);
+
+      if (!ok) {
+        const voices = window.speechSynthesis.getVoices();
+        const msg = voices.length === 0
+          ? '当前环境没有可用语音包（请安装中文 TTS 语音）'
+          : 'speechSynthesis 不可用';
+        songloftToast && songloftToast(msg, 'error');
+        this._openOriginalUrl(news);
+        return;
+      }
+
+      // 自动选择中文 voice
+      const zhVoice = this._pickChineseVoice();
+      if (zhVoice) {
+        console.log('[TTS] picked voice:', zhVoice.lang, zhVoice.name);
+      } else {
+        console.warn('[TTS] no Chinese voice found, falling back to default');
+      }
+
+      await this._speakSegments(ttsScript, zhVoice);
     } catch (e) {
+      console.error('[TTS] _playTts error:', e);
       songloftToast && songloftToast('TTS 失败: ' + (e && e.message ? e.message : String(e)), 'error');
+    }
+  }
+
+  /**
+   * TTS 不可用时降级：打开原文链接
+   */
+  _openOriginalUrl(news) {
+    if (news && news.url) {
+      songloftToast && songloftToast('已为你打开原文（TTS 不可用）', 'info');
+      try {
+        window.open(news.url, '_blank');
+      } catch (e) {}
     }
   }
 
@@ -232,36 +313,83 @@ class NewsPlayer {
       .trim();
   }
 
-  _speakSegments(segments) {
+  _speakSegments(segments, preferredVoice) {
     return new Promise((resolve) => {
       const synth = window.speechSynthesis;
       let i = 0;
-      
+      let hasError = false;
+      const startedAt = Date.now();
+
       const speakNext = () => {
         if (i >= segments.length) {
+          console.log('[TTS] finished, segments=' + segments.length + ' dur=' + (Date.now() - startedAt) + 'ms');
           resolve();
           return;
         }
-        
+
         const seg = segments[i++];
         if (seg.type === 'pause') {
           setTimeout(speakNext, seg.durationMs || 200);
           return;
         }
-        
-        const utter = new SpeechSynthesisUtterance(seg.text);
-        utter.lang = this.ttsConfig.voice;
-        utter.rate = this.ttsConfig.rate;
-        utter.pitch = this.ttsConfig.pitch;
-        utter.volume = this.ttsConfig.volume;
+
+        // 跳过空文本段
+        const text = (seg.text || '').trim();
+        if (!text) {
+          speakNext();
+          return;
+        }
+
+        const utter = new SpeechSynthesisUtterance(text);
+        // 绑定中文 voice（关键：默认 voice 可能是非中文，导致朗读中文无声）
+        if (preferredVoice) {
+          utter.voice = preferredVoice;
+          utter.lang = preferredVoice.lang;
+        } else {
+          utter.lang = this.ttsConfig.voice || 'zh-CN';
+        }
+        utter.rate = this.ttsConfig.rate || 1.0;
+        utter.pitch = this.ttsConfig.pitch || 1.0;
+        utter.volume = this.ttsConfig.volume != null ? this.ttsConfig.volume : 1.0;
+
+        utter.onstart = () => {
+          console.log('[TTS] speaking segment ' + (i - 1) + ': ' + text.slice(0, 30) + '...');
+        };
         utter.onend = speakNext;
-        utter.onerror = speakNext;
+        utter.onerror = (ev) => {
+          // 错误类型见 https://developer.mozilla.org/en-US/docs/Web/API/SpeechSynthesisErrorEvent/error
+          console.error('[TTS] utter error:', ev.error || ev.type, 'seg=' + (i - 1));
+          // interrupted/canceled 是正常的（切换/停止时），不弹错误
+          if (ev.error === 'interrupted' || ev.error === 'canceled') {
+            resolve();
+            return;
+          }
+          if (!hasError) {
+            hasError = true;
+            songloftToast && songloftToast('朗读失败: ' + (ev.error || '未知错误'), 'error');
+          }
+          // 继续下一段，避免完全卡住
+          setTimeout(speakNext, 100);
+        };
         this.ttsUtterances.push(utter);
-        synth.speak(utter);
+        try {
+          synth.speak(utter);
+        } catch (e) {
+          console.error('[TTS] synth.speak throw:', e);
+          if (!hasError) {
+            hasError = true;
+            songloftToast && songloftToast('朗读调用失败: ' + (e && e.message ? e.message : String(e)), 'error');
+          }
+          resolve();
+        }
       };
-      
-      synth.cancel();
-      speakNext();
+
+      // 取消之前的朗读，再开始新的
+      try {
+        synth.cancel();
+      } catch (e) {}
+      // 部分浏览器 cancel 后立即 speak 会失败，稍微延迟
+      setTimeout(speakNext, 50);
     });
   }
   

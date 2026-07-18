@@ -77,14 +77,32 @@ export function buildTtsScript(news: NewsItem, content?: string): TtsSegment[] {
       const paragraphs = cleanContent.split(/[。！？\n]/).filter(p => p.trim());
       for (let i = 0; i < Math.min(paragraphs.length, 50); i++) {
         const p = paragraphs[i].trim();
-        if (p) {
+        if (!p) continue;
+        // 超长段落进一步按分号/逗号拆分，避免单段超过 180 字符
+        // （部分 WebView 的 speechSynthesis 在长文本上会卡死或无声）
+        const chunks: string[] = [];
+        if (p.length <= 180) {
+          chunks.push(p);
+        } else {
+          let cur = '';
+          for (const piece of p.split(/[；;，,]/)) {
+            if ((cur + piece).length > 180) {
+              if (cur) chunks.push(cur);
+              cur = piece;
+            } else {
+              cur = cur ? cur + piece : piece;
+            }
+          }
+          if (cur) chunks.push(cur);
+        }
+        for (let j = 0; j < chunks.length; j++) {
           segments.push({
-            id: `content-${i}`,
+            id: `content-${i}-${j}`,
             type: 'content',
-            text: p,
+            text: chunks[j],
           });
           segments.push({
-            id: `pause-c-${i}`,
+            id: `pause-c-${i}-${j}`,
             type: 'pause',
             text: '',
             durationMs: 200,
