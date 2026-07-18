@@ -5,8 +5,11 @@ const SOURCES_KEY = 'news_custom_sources';
 
 export async function getStoredSources(): Promise<any[]> {
   try {
-    const sources = await songloft.storage.get(SOURCES_KEY) as any[] | null;
-    return sources || [];
+    const raw = await songloft.storage.get(SOURCES_KEY);
+    if (raw === null) return [];
+    const sources = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    if (!Array.isArray(sources)) return [];
+    return sources as any[];
   } catch (e) {
     songloft.log.warn('Failed to load stored sources: ' + (e as Error).message);
     return [];

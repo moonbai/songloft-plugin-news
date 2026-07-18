@@ -158,13 +158,18 @@ function setupRouter(): void {
       setupRouter();
     }
 
-    // 官方 SDK 的 req.query 是原始字符串，parseQuery 解析后合并到 req 上方便 handler 使用
-    // 这里不修改原 req，而是构造一个带 parsed query 的新对象传给 router
+    // 从完整路径中提取插件内部路径
+    // 宿主转发请求时路径格式: /api/v1/jsplugin/{entryPath}/api/...
+    // 我们需要去掉 /api/v1/jsplugin/{entryPath} 前缀，只保留内部路径
+    let internalPath = req.path.split('?')[0];
+    const entryPrefix = `/api/v1/jsplugin/news`;
+    if (internalPath.startsWith(entryPrefix)) {
+      internalPath = internalPath.slice(entryPrefix.length);
+    }
+
     const routedReq: HTTPRequest = {
       ...req,
-      // 把解析后的 query 对象挂到 headers 旁边的自定义字段不可行（类型限制），
-      // 官方 router.handle 会把原 req 透传给 handler，handler 内部自行 parseQuery
-      path: req.path.split('?')[0],
+      path: internalPath,
     };
 
     const result = await router!.handle(routedReq);

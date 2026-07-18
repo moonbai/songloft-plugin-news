@@ -40,9 +40,9 @@ export function getDefaultTtsConfig(): TtsConfig {
 
 export async function getTtsConfig(): Promise<TtsConfig> {
   try {
-    // 官方 storage.get 返回原类型值（自动反序列化），无需 JSON.parse
-    const config = await songloft.storage.get(TTS_CONFIG_KEY) as TtsConfig | null;
-    if (!config) return getDefaultTtsConfig();
+    const raw = await songloft.storage.get(TTS_CONFIG_KEY);
+    if (raw === null) return getDefaultTtsConfig();
+    const config = typeof raw === 'string' ? JSON.parse(raw) : raw;
     return { ...getDefaultTtsConfig(), ...config };
   } catch (e) {
     songloft.log.warn('Failed to load TTS config: ' + (e as Error).message);
@@ -61,8 +61,11 @@ export async function setTtsConfig(config: TtsConfig): Promise<void> {
 
 export async function getPlaylists(): Promise<{ name: string; items: PlaylistItem[] }[]> {
   try {
-    const playlists = await songloft.storage.get(PLAYLIST_KEY) as { name: string; items: PlaylistItem[] }[] | null;
-    return playlists || [];
+    const raw = await songloft.storage.get(PLAYLIST_KEY);
+    if (raw === null) return [];
+    const playlists = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    if (!Array.isArray(playlists)) return [];
+    return playlists as { name: string; items: PlaylistItem[] }[];
   } catch (e) {
     songloft.log.warn('Failed to load playlists: ' + (e as Error).message);
     return [];
