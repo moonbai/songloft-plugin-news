@@ -6,7 +6,8 @@
   "minHostVersion": "1.0.0",
   "permissions": [
     "storage",
-    "jsenv"
+    "jsenv",
+    "songs.write"
   ],
   "publicPaths": [
     "/api"

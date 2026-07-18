@@ -499,6 +499,7 @@ function renderPlayActions(item) {
     <div class="play-actions" data-id="${escapeHtml(item.id)}" data-source="${escapeHtml(item.source)}">
       ${hasAudio ? `<button class="play-btn" data-action="play-audio" data-url="${escapeHtml(item.audioUrl)}">▶ 播放音频</button>` : ''}
       ${supportsTts ? `<button class="play-btn tts" data-action="play-tts">🔊 朗读</button>` : ''}
+      ${hasAudio ? `<button class="play-btn host" data-action="add-to-host" title="加入宿主歌曲库">⭐ 加入歌单</button>` : ''}
       <button class="play-btn add" data-action="add-playlist">+ 播放列表</button>
     </div>
   `;
@@ -573,6 +574,34 @@ function attachNewsItemHandlers(container) {
             btn.textContent = '✓ 已添加';
           } else {
             showToast('添加失败: ' + result.msg, 'error');
+          }
+        } else if (action === 'add-to-host') {
+          // 方案 A：注册到宿主原生歌曲库
+          if (!playItem.audioUrl) {
+            showToast('该新闻无音频，无法加入歌单', 'info');
+            return;
+          }
+          const original = btn.textContent;
+          btn.textContent = '⏳ 注册中...';
+          btn.disabled = true;
+          try {
+            const result = await api('/player/register-song', {
+              method: 'POST',
+              body: JSON.stringify({ news: playItem }),
+            });
+            if (result.code === 0 && result.data?.songId) {
+              showToast(`已加入宿主歌单（songId: ${result.data.songId}）`, 'success');
+              btn.textContent = '✓ 已加入歌单';
+              btn.classList.add('added');
+            } else {
+              showToast('加入失败: ' + (result.msg || '未知错误'), 'error');
+              btn.textContent = original;
+            }
+          } catch (e) {
+            showToast('加入失败: ' + (e && e.message ? e.message : String(e)), 'error');
+            btn.textContent = original;
+          } finally {
+            btn.disabled = false;
           }
         }
       });
@@ -864,6 +893,33 @@ function attachPlaylistHandlers(container, list) {
           if (result.code === 0) {
             showToast('已移除', 'success');
             loadPlaylist();
+          }
+        } else if (action === 'add-to-host') {
+          if (!item.audioUrl) {
+            showToast('该新闻无音频，无法加入歌单', 'info');
+            return;
+          }
+          const original = btn.textContent;
+          btn.textContent = '⏳ 注册中...';
+          btn.disabled = true;
+          try {
+            const result = await api('/player/register-song', {
+              method: 'POST',
+              body: JSON.stringify({ news: item }),
+            });
+            if (result.code === 0 && result.data?.songId) {
+              showToast(`已加入宿主歌单（songId: ${result.data.songId}）`, 'success');
+              btn.textContent = '✓ 已加入歌单';
+              btn.classList.add('added');
+            } else {
+              showToast('加入失败: ' + (result.msg || '未知错误'), 'error');
+              btn.textContent = original;
+            }
+          } catch (e) {
+            showToast('加入失败: ' + (e && e.message ? e.message : String(e)), 'error');
+            btn.textContent = original;
+          } finally {
+            btn.disabled = false;
           }
         }
       });

@@ -73,6 +73,9 @@ function setupRouter(): void {
   router.get('/api/player/tts-config', playerHandlers.getTtsConfig);
   router.post('/api/player/tts-config', playerHandlers.setTtsConfig);
   router.get('/api/player/playable', playerHandlers.getPlayableNews);
+  // 方案 A：接入宿主原生歌曲库
+  router.post('/api/player/register-song', playerHandlers.registerSong);
+  router.post('/api/player/register-batch', playerHandlers.registerBatch);
 
   // 聚合接口 - 多平台热榜聚合（去重 + 归一化排序，带 TTL 缓存）
   router.get('/api/aggregate/hotboard', async (req) => {

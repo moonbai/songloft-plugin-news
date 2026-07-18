@@ -109,11 +109,11 @@ npm run dev
 - `songloft.storage` — 数据持久化（播放列表、TTS 配置、自定义源）
 - `songloft.jsenv` — 子 VM 运行自定义解析脚本
 - `songloft.log` — 日志（注意：只接受单个 string 参数）
+- `songloft.songs.create()` — 把新闻音频注册为宿主歌曲库的 Song（方案 A，需 `songs.write` 权限）
 - 全局类型声明（`HTTPRequest` / `HTTPResponse` / `Songloft` 等）
 
-**尚未使用但官方已提供的扩展能力**（可用于后续接入宿主原生播放/歌单）：
+**尚未使用但官方已提供的扩展能力**（后续可按需接入）：
 
-- `songloft.songs.create()` — 把远程音频注册为宿主歌曲库的 Song
 - `songloft.playlists.*` — 操作宿主原生歌单（创建/添加歌曲/移除等）
 - `songloft.events.onPlayEvent()` — 订阅播放事件
 - `createMusicUrlHandler()` — 标准化音乐 URL 解析 handler

@@ -1,6 +1,6 @@
 // 播放器 HTTP 处理
 import { parseQuery } from '@songloft/plugin-sdk';
-import type { HTTPRequest } from '@songloft/plugin-sdk';
+import type { HTTPRequest, CreateSongInput, Song } from '@songloft/plugin-sdk';
 import { platformModules } from '../newsSdk/facade';
 import { successResponse, errorResponse, badRequestResponse, parseJsonBody } from './response';
 import {
@@ -10,6 +10,23 @@ import {
 } from '../player';
 import type { PlaylistItem, TtsConfig } from '../player';
 import type { NewsItem } from '../types';
+
+/**
+ * 把 NewsItem 转成官方 songs.create 的入参
+ */
+function newsToSongInput(news: NewsItem): CreateSongInput | null {
+  if (!news.audioUrl) return null;
+  return {
+    url: news.audioUrl,
+    title: news.title,
+    artist: news.sourceName || news.author || news.source,
+    album: '新闻资讯',
+    coverUrl: news.cover,
+    duration: news.audioDuration,
+    sourceData: JSON.stringify({ newsId: news.id, source: news.source, sourceUrl: news.url }),
+    dedupKey: `${news.source}:${news.id}`,
+  };
+}
 
 export function createPlayerHandlers() {
   return {
@@ -211,6 +228,88 @@ export function createPlayerHandlers() {
         });
       } catch (e) {
         return errorResponse('Get playable failed: ' + (e as Error).message);
+      }
+    },
+
+    /**
+     * 注册单条新闻音频到宿主歌曲库（方案 A）
+     * - news.audioUrl 必填
+     * - dedupKey 用 `${source}:${id}`，重复注册会复用同一 Song
+     */
+    async registerSong(req: HTTPRequest) {
+      try {
+        if (!req.body) return badRequestResponse('No body');
+        const parsed = parseJsonBody(req.body);
+        const news = parsed.news as NewsItem;
+
+        if (!news || !news.id || !news.title) {
+          return badRequestResponse('news (with id and title) is required');
+        }
+        if (!news.audioUrl) {
+          return badRequestResponse('news.audioUrl is required');
+        }
+
+        const songInput = newsToSongInput(news);
+        if (!songInput) return badRequestResponse('invalid news audio');
+
+        const songs: Song[] = await songloft.songs.create([songInput]);
+        const song = songs[0];
+        if (!song) return errorResponse('Host refused to create song');
+
+        return successResponse({
+          song,
+          songId: song.id,
+          // 让前端能直接调用宿主播放
+          playableUrl: song.url,
+        });
+      } catch (e) {
+        return errorResponse('Register song failed: ' + (e as Error).message);
+      }
+    },
+
+    /**
+     * 批量注册可播放新闻到宿主歌曲库
+     * - 用于"一键加入歌单"场景
+     * - 自动跳过无 audioUrl 的新闻
+     * - 返回成功/跳过计数
+     */
+    async registerBatch(req: HTTPRequest) {
+      try {
+        if (!req.body) return badRequestResponse('No body');
+        const parsed = parseJsonBody(req.body);
+        const newsList = (parsed.newsList || parsed.news || []) as NewsItem[];
+        if (!Array.isArray(newsList) || newsList.length === 0) {
+          return badRequestResponse('newsList is required and must be non-empty');
+        }
+
+        const inputs: CreateSongInput[] = [];
+        const skipped: { id: string; title: string; reason: string }[] = [];
+        for (const n of newsList) {
+          if (!n || !n.id || !n.title) {
+            skipped.push({ id: n?.id || '', title: n?.title || '', reason: 'missing id/title' });
+            continue;
+          }
+          if (!n.audioUrl) {
+            skipped.push({ id: n.id, title: n.title, reason: 'no audioUrl' });
+            continue;
+          }
+          const input = newsToSongInput(n);
+          if (input) inputs.push(input);
+        }
+
+        if (inputs.length === 0) {
+          return successResponse({ created: 0, skipped: skipped.length, skipped });
+        }
+
+        const songs: Song[] = await songloft.songs.create(inputs);
+        return successResponse({
+          created: songs.length,
+          songs,
+          skipped: skipped.length,
+          skipped,
+        });
+      } catch (e) {
+        return errorResponse('Register batch failed: ' + (e as Error).message);
       }
     },
   };

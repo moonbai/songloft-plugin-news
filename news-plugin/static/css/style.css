@@ -121,6 +121,8 @@ input:checked + .slider:before { transform: translateX(18px); }
 }
 .news-item .play-btn:hover { opacity: 0.9; }
 .news-item .play-btn.tts { background: var(--news-success); }
+.news-item .play-btn.host { background: var(--news-warning); color: #000; }
+.news-item .play-btn.host.added { background: var(--news-success); color: var(--news-on-primary); }
 .news-item .play-btn.add { background: var(--news-surface-variant); color: var(--news-on-surface-variant); }
 .news-item .play-btn.add.added { background: var(--news-success); color: var(--news-on-primary); }
 .news-item .audio-badge { background: var(--news-primary); color: var(--news-on-primary); padding: 2px 6px; border-radius: 4px; font-size: 11px; }

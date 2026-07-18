@@ -1,5 +1,28 @@
 # 更新日志
 
+## v1.3.4 (2026-07-18)
+
+### 新增 - 接入宿主原生歌曲库（方案 A）
+
+#### 后端
+- **plugin.json** 新增 `songs.write` 权限
+- **POST /api/player/register-song**：单条新闻音频注册为宿主 Song（自动去重，dedupKey=`{source}:{id}`）
+- **POST /api/player/register-batch**：批量注册可播放新闻，自动跳过无 audioUrl 的条目
+- 复用官方 `songloft.songs.create()`，返回 songId + 可播放 URL
+
+#### 前端
+- 新闻列表项新增「⭐ 加入歌单」按钮（仅有音频的新闻显示）
+- 播放列表面板同步支持「加入歌单」操作
+- 注册中显示 loading 状态，成功后置为「✓ 已加入歌单」
+- 按钮配色：橙色（warning）区分于播放/朗读/添加按钮
+
+#### TTS 浏览器兼容性优化
+- 新增 `_ttsAvailable()` / `_waitForVoices()` 检测浏览器 TTS 能力
+  （部分 WebView 有 SpeechSynthesis API 但无可用语音）
+- 播放决策：无 TTS 时自动降级到音频播放或提示查看正文
+- UI 自适应：不支持 TTS 时不渲染朗读按钮，避免误导
+- 统一 `_playTts` / `_loadTtsConfig` / `_saveTtsConfig` 使用 `api()`
+
 ## v1.3.0 (2026-07-18)
 
 ### 重大重构 - 对齐官方 SDK
