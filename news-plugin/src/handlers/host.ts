@@ -20,7 +20,7 @@ import type { NewsItem } from '../types';
 import { buildBaiduTtsUrl } from '../utils/tts';
 
 // 只在这些源里搜可播放内容（有音频的 + 支持TTS的）
-const PLAYABLE_SOURCES = ['cctv', 'cnr', 'people', 'ximalaya', 'dedao', 'weibo', 'zhihu', 'baidu', '36kr', 'ithome', 'huxiu', 'sspai', 'juejin'];
+const PLAYABLE_SOURCES = ['ximalaya', 'dedao', 'weibo', 'zhihu', 'baidu', '36kr', 'ithome', 'huxiu', 'sspai', 'juejin'];
 
 interface NewsSourceData {
   source: string;
