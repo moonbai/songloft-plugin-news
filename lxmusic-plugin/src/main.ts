@@ -13,7 +13,7 @@ import {
 import { RuntimeManager } from './engine';
 import { SourceManager } from './source';
 import { platformModules, sources } from './musicSdk/facade';
-import { success, error, badRequest } from './handlers/response';
+import { success, error, badRequest, successWithWarning } from './handlers/response';
 import {
   songlistTags,
   songlistList,
@@ -23,7 +23,7 @@ import {
 } from './handlers/songlist';
 import { leaderboardBoards, leaderboardList } from './handlers/leaderboard';
 import { createDirectMusicUrlHandler, createDirectLyricHandler } from './handlers/direct';
-import { importSongToLibrary, makeDedupKey, makeLyricUrl } from './utils/http';
+import { importSongToLibrary, makeDedupKey, makeLyricUrl, listPlaylists, createPlaylist, addSongsToPlaylist, updatePlaylist } from './utils/http';
 import type { SongInfo, SourceData } from './types';
 import type { MusicUrlFallbackHint } from './@songloft/plugin-sdk';
 
@@ -178,8 +178,25 @@ function initRouter(): void {
       const text = new TextDecoder().decode(req.body);
       const parsed = JSON.parse(text) as Record<string, unknown>;
       const songs = (parsed.songs as Array<Record<string, unknown>>) || [];
+      const playlistId = String(parsed.playlist_id || '');
+      const newPlaylistName = String(parsed.new_playlist_name || '');
 
-      const results: Array<{ success: boolean; data?: unknown; error?: string }> = [];
+      // 如果要求新建歌单，先创建
+      let targetPlaylistId = playlistId;
+      if (!targetPlaylistId && newPlaylistName) {
+        // 用第一首歌的封面作为新歌单封面（无封面时留空，后续补充）
+        const firstCover = songs.length > 0 ? (songs[0].cover_url as string) || '' : '';
+        const pl = await createPlaylist(newPlaylistName, firstCover) as Record<string, unknown> | null;
+        if (pl && pl.id) {
+          targetPlaylistId = String(pl.id);
+        } else {
+          return error('Failed to create playlist');
+        }
+      }
+
+      const results: Array<{ success: boolean; data?: unknown; error?: string; song_id?: string }> = [];
+      const importedSongIds: string[] = [];
+      const importedCovers: string[] = [];
 
       for (const song of songs) {
         try {
@@ -205,15 +222,39 @@ function initRouter(): void {
             dedup_key: dedupKey,
             lyric_source: 'url',
             lyric: lyricUrl,
-          });
+          }) as Record<string, unknown> | null;
 
-          results.push({ success: true, data });
+          const songId = data ? String(data.id || data.song_id || '') : '';
+          if (songId) importedSongIds.push(songId);
+          if (song.cover_url) importedCovers.push(song.cover_url as string);
+
+          results.push({ success: true, data, song_id: songId });
         } catch (e) {
           results.push({ success: false, error: (e as Error).message });
         }
       }
 
-      return success(results);
+      // 如果指定了目标歌单，批量添加导入成功的歌曲
+      let playlistResult: { added: number; playlist_id: string } | null = null;
+      if (targetPlaylistId && importedSongIds.length > 0) {
+        try {
+          await addSongsToPlaylist(targetPlaylistId, importedSongIds);
+          playlistResult = { added: importedSongIds.length, playlist_id: targetPlaylistId };
+
+          // 如果歌单无封面且是已有歌单（非新建），用第一首导入歌的封面补充
+          if (!newPlaylistName && importedCovers.length > 0) {
+            try {
+              await updatePlaylist(targetPlaylistId, { cover: importedCovers[0] });
+            } catch {
+              // 补充封面失败不影响主流程
+            }
+          }
+        } catch (e) {
+          return successWithWarning(results, '歌曲已导入但添加到歌单失败: ' + (e as Error).message);
+        }
+      }
+
+      return success({ songs: results, playlist: playlistResult });
     } catch (e) {
       return error('Failed: ' + (e as Error).message);
     }
@@ -351,6 +392,34 @@ function initRouter(): void {
 
   router.get('/api/leaderboard/boards', leaderboardBoards);
   router.get('/api/leaderboard/list', leaderboardList);
+
+  // --- 歌单管理 (转发宿主) ---
+
+  router.get('/api/playlists', async () => {
+    try {
+      const data = await listPlaylists();
+      return success(data);
+    } catch (e) {
+      return error('Failed: ' + (e as Error).message);
+    }
+  });
+
+  router.post('/api/playlists', async (req) => {
+    try {
+      if (!req.body) return badRequest('No body');
+      const text = new TextDecoder().decode(req.body);
+      const parsed = JSON.parse(text) as Record<string, unknown>;
+      const name = String(parsed.name || '');
+      const cover = String(parsed.cover || '');
+
+      if (!name) return badRequest('name is required');
+
+      const data = await createPlaylist(name, cover);
+      return success(data);
+    } catch (e) {
+      return error('Failed: ' + (e as Error).message);
+    }
+  });
 
   // --- Direct ---
 

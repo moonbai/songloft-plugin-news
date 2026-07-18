@@ -84,3 +84,25 @@ export async function makeLyricUrl(platform: string, songInfo: Record<string, un
   const songmid = songInfo.songmid || songInfo.musicId || '';
   return `${hostUrl}/api/v1/jsplugin/lxmusic/api/direct/lyric?source_id=${encodeURIComponent(platform)}&musicId=${encodeURIComponent(String(musicId))}&songmid=${encodeURIComponent(String(songmid))}`;
 }
+
+/* ============ 歌单管理 (通过 songloft.playlists 桥接) ============ */
+
+/** 获取宿主歌单列表 */
+export async function listPlaylists(): Promise<unknown> {
+  return await songloft.playlists.list({});
+}
+
+/** 创建新歌单 */
+export async function createPlaylist(name: string, cover?: string): Promise<unknown> {
+  return await songloft.playlists.create({ name, cover: cover || '' });
+}
+
+/** 批量添加歌曲到歌单 */
+export async function addSongsToPlaylist(playlistId: string, songIds: string[]): Promise<unknown> {
+  return await songloft.playlists.addSongs(playlistId, songIds);
+}
+
+/** 更新歌单信息 (用于补充封面) */
+export async function updatePlaylist(playlistId: string, data: Record<string, unknown>): Promise<unknown> {
+  return await songloft.playlists.update(playlistId, data);
+}

@@ -209,6 +209,42 @@
     </main>
   </div>
 
+  <!-- 导入目标选择对话框 -->
+  <div class="modal-overlay" id="importModal" hidden>
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title">选择导入目标</h3>
+        <button class="modal-close" id="importModalClose" aria-label="关闭">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-option" data-target="library">
+          <span class="modal-option-icon">🎵</span>
+          <div class="modal-option-text">
+            <div class="modal-option-title">导入到音乐库</div>
+            <div class="modal-option-desc">仅添加到音乐库，不加入歌单</div>
+          </div>
+        </div>
+        <div class="modal-divider"></div>
+        <div class="modal-option" data-target="new-playlist">
+          <span class="modal-option-icon">✨</span>
+          <div class="modal-option-text">
+            <div class="modal-option-title">新建歌单并导入</div>
+            <div class="modal-option-desc">创建新歌单，导入后自动加入</div>
+          </div>
+        </div>
+        <div class="modal-new-playlist" id="newPlaylistBox" hidden>
+          <input type="text" id="newPlaylistName" placeholder="输入新歌单名称" autocomplete="off">
+          <button class="btn btn-primary btn-sm" id="confirmNewPlaylist">确认导入</button>
+        </div>
+        <div class="modal-divider" id="existingDivider"></div>
+        <div class="modal-section-title" id="existingTitle">选择已有歌单</div>
+        <div class="modal-playlist-list" id="modalPlaylistList">
+          <div class="empty">加载中…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script src="static/js/app.js"></script>

@@ -206,6 +206,116 @@
   }
 
   /* =========================================================
+   * 导入目标选择对话框
+   * ========================================================= */
+
+  // 当前待导入的歌曲列表和触发按钮
+  var pendingImport = { songs: [], btn: null };
+
+  function openImportModal(songs, btn) {
+    if (!songs || songs.length === 0) { showToast('请先选择歌曲', 'warning'); return; }
+    pendingImport = { songs: songs, btn: btn };
+    $('importModal').hidden = false;
+    $('newPlaylistBox').hidden = true;
+    $('newPlaylistName').value = '';
+    loadModalPlaylists();
+  }
+
+  function closeImportModal() {
+    $('importModal').hidden = true;
+    pendingImport = { songs: [], btn: null };
+  }
+
+  function loadModalPlaylists() {
+    var list = $('modalPlaylistList');
+    list.innerHTML = '<div class="empty">加载中…</div>';
+    api('playlists').then(function (res) {
+      if (res && res.code === 0) {
+        var playlists = extractPlaylistList(res.data);
+        if (playlists.length === 0) {
+          list.innerHTML = '<div class="empty">暂无歌单</div>';
+          return;
+        }
+        list.innerHTML = playlists.map(function (pl) {
+          var coverHtml = pl.cover
+            ? '<img src="' + escapeHtml(pl.cover) + '" alt="" onerror="this.style.display=\'none\';this.parentElement.textContent=\'♪\'">'
+            : '♪';
+          return '<div class="modal-playlist-item" data-id="' + escapeHtml(pl.id) + '">' +
+            '<div class="modal-playlist-cover">' + coverHtml + '</div>' +
+            '<div class="modal-playlist-name">' + escapeHtml(pl.name) + '</div>' +
+            (pl.count != null ? '<span class="modal-playlist-count">' + pl.count + ' 首</span>' : '') +
+          '</div>';
+        }).join('');
+
+        list.querySelectorAll('.modal-playlist-item').forEach(function (item) {
+          item.addEventListener('click', function () {
+            doImport(pendingImport.songs, pendingImport.btn, { playlist_id: item.dataset.id });
+          });
+        });
+      } else {
+        list.innerHTML = '<div class="empty">' + escapeHtml((res && res.msg) || '加载失败') + '</div>';
+      }
+    });
+  }
+
+  /** 从后端返回的不定结构中提取歌单列表 */
+  function extractPlaylistList(data) {
+    var arr = [];
+    if (Array.isArray(data)) arr = data;
+    else if (data && Array.isArray(data.list)) arr = data.list;
+    else if (data && Array.isArray(data.data)) arr = data.data;
+    else if (data && Array.isArray(data.playlists)) arr = data.playlists;
+
+    return arr.map(function (p) {
+      if (typeof p === 'string') return { id: p, name: p, cover: '', count: null };
+      if (p && typeof p === 'object') {
+        return {
+          id: String(p.id != null ? p.id : (p.playlist_id != null ? p.playlist_id : '')),
+          name: String(p.name != null ? p.name : (p.title != null ? p.title : '未命名')),
+          cover: p.cover || p.cover_url || p.pic || '',
+          count: p.count != null ? p.count : (p.song_count != null ? p.song_count : (p.total != null ? p.total : null))
+        };
+      }
+      return null;
+    }).filter(function (p) { return p && p.id; });
+  }
+
+  /**
+   * 执行导入
+   * @param {Array} songs 待导入歌曲
+   * @param {Element} btn 触发按钮 (用于 loading 态)
+   * @param {Object} extra 额外参数 { playlist_id?, new_playlist_name? }
+   */
+  function doImport(songs, btn, extra) {
+    if (!songs || songs.length === 0) { showToast('请先选择歌曲', 'warning'); return; }
+    closeImportModal();
+    setLoading(btn, true);
+
+    var body = { songs: songs };
+    if (extra && extra.playlist_id) body.playlist_id = extra.playlist_id;
+    if (extra && extra.new_playlist_name) body.new_playlist_name = extra.new_playlist_name;
+
+    api('songs/import', { method: 'POST', body: body }).then(function (res) {
+      setLoading(btn, false);
+      if (res && res.code === 0) {
+        var data = res.data || {};
+        var results = Array.isArray(data.songs) ? data.songs : (Array.isArray(data) ? data : []);
+        var ok = 0, fail = 0;
+        results.forEach(function (r) { if (r && r.success) ok++; else fail++; });
+
+        var msg = '成功导入 ' + ok + ' 首歌曲';
+        if (data.playlist) {
+          msg += '，已添加到歌单';
+        }
+        if (fail > 0) msg += '（失败 ' + fail + ' 首）';
+        showToast(msg, fail > 0 ? 'warning' : 'success');
+      } else {
+        showToast('导入失败: ' + (res && res.msg ? res.msg : '未知错误'), 'error');
+      }
+    });
+  }
+
+  /* =========================================================
    * 搜索
    * ========================================================= */
 
@@ -327,21 +437,7 @@
       };
     });
     if (songs.length === 0) { showToast('请先选择歌曲', 'warning'); return; }
-
-    var btn = $('importBtn');
-    setLoading(btn, true);
-    api('songs/import', { method: 'POST', body: { songs: songs } }).then(function (res) {
-      setLoading(btn, false);
-      if (res && res.code === 0) {
-        var results = Array.isArray(res.data) ? res.data : [];
-        var ok = 0, fail = 0;
-        results.forEach(function (r) { if (r && r.success) ok++; else fail++; });
-        if (fail === 0) showToast('成功导入 ' + ok + ' 首歌曲', 'success');
-        else showToast('导入完成: 成功 ' + ok + ' 首, 失败 ' + fail + ' 首', 'warning');
-      } else {
-        showToast('导入失败: ' + (res && res.msg ? res.msg : '未知错误'), 'error');
-      }
-    });
+    openImportModal(songs, $('importBtn'));
   }
 
   /* =========================================================
@@ -801,20 +897,7 @@
       };
     });
 
-    var btn = $('importSonglistBtn');
-    setLoading(btn, true);
-    api('songs/import', { method: 'POST', body: { songs: songs } }).then(function (res) {
-      setLoading(btn, false);
-      if (res && res.code === 0) {
-        var results = Array.isArray(res.data) ? res.data : [];
-        var ok = 0, fail = 0;
-        results.forEach(function (r) { if (r && r.success) ok++; else fail++; });
-        if (fail === 0) showToast('成功导入 ' + ok + ' 首歌曲', 'success');
-        else showToast('导入完成: 成功 ' + ok + ' 首, 失败 ' + fail + ' 首', 'warning');
-      } else {
-        showToast('导入失败: ' + (res && res.msg ? res.msg : ''), 'error');
-      }
-    });
+    openImportModal(songs, $('importSonglistBtn'));
   }
 
   /* =========================================================
@@ -904,6 +987,31 @@
     $('songlistNext').addEventListener('click', function () {
       var pages = Math.ceil(songlistState.total / songlistState.pageSize);
       if (songlistState.page < pages) loadSonglistList(songlistState.page + 1);
+    });
+
+    // 导入目标对话框
+    $('importModalClose').addEventListener('click', closeImportModal);
+    $('importModal').addEventListener('click', function (e) {
+      if (e.target === $('importModal')) closeImportModal();
+    });
+    document.querySelectorAll('.modal-option').forEach(function (opt) {
+      opt.addEventListener('click', function () {
+        var target = opt.dataset.target;
+        if (target === 'library') {
+          doImport(pendingImport.songs, pendingImport.btn, {});
+        } else if (target === 'new-playlist') {
+          $('newPlaylistBox').hidden = false;
+          $('newPlaylistName').focus();
+        }
+      });
+    });
+    $('confirmNewPlaylist').addEventListener('click', function () {
+      var name = $('newPlaylistName').value.trim();
+      if (!name) { showToast('请输入歌单名称', 'warning'); return; }
+      doImport(pendingImport.songs, pendingImport.btn, { new_playlist_name: name });
+    });
+    $('newPlaylistName').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') $('confirmNewPlaylist').click();
     });
 
     window.addEventListener('resize', moveTabIndicator);
