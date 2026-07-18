@@ -11,6 +11,17 @@ let router: ReturnType<typeof createRouter> | null = null;
 let runtimeManager: RuntimeManager | null = null;
 let sourceManager: SourceManager | null = null;
 
+/**
+ * 标题归一化：用于跨平台去重
+ * 去除空格、标点、特殊符号，转小写，取前 50 字符
+ */
+function normalizeTitle(title: string): string {
+  return String(title || '')
+    .toLowerCase()
+    .replace(/[\s\u3000\x00-\x1f!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~「」『』【】（）()《》〈〉“”‘’''…—\-–·.,!?;:'"]/g, '')
+    .slice(0, 50);
+}
+
 function setupRouter(): void {
   router = createRouter();
 
@@ -48,10 +59,11 @@ function setupRouter(): void {
   router.post('/api/player/tts-config', playerHandlers.setTtsConfig);
   router.get('/api/player/playable', playerHandlers.getPlayableNews);
 
-  // 聚合接口 - 多平台热榜聚合
+  // 聚合接口 - 多平台热榜聚合（去重 + 归一化排序）
   router.get('/api/aggregate/hotboard', async (req) => {
     try {
       const limit = Number(req.query.limit) || 10;
+      const perPlatformLimit = Math.max(limit, 20); // 每个平台多取一些用于去重后仍有足够数据
       // 所有支持 hotboard 的平台
       const platforms = ['baidu', 'weibo', 'zhihu', 'wangyi', 'toutiao', '36kr', 'pengpai', 'ximalaya', 'dedao'];
 
@@ -61,8 +73,16 @@ function setupRouter(): void {
           if (!module?.hotboard) return { source, news: [] };
           const boards = await module.hotboard.boards();
           if (!boards || boards.length === 0) return { source, news: [] };
-          const result = await module.hotboard.list(boards[0].id, 1, limit);
-          return { source, news: result.news || [] };
+          const result = await module.hotboard.list(boards[0].id, 1, perPlatformLimit);
+          const news = result.news || [];
+          // 平台内归一化：按 hot 值在该平台内的百分位计算 hotLevel (0-100)
+          const maxHot = news.reduce((mx: number, n: any) => Math.max(mx, Number(n.hot || 0)), 0);
+          const normalized = news.map((n: any) => ({
+            ...n,
+            hotLevel: maxHot > 0 ? Math.round((Number(n.hot || 0) / maxHot) * 100) : 0,
+            sources: [source],
+          }));
+          return { source, news: normalized };
         } catch (e) {
           songloft.log.error('aggregate/hotboard: ' + source + ' failed: ' + (e as Error).message);
           return { source, news: [], error: String(e) };
@@ -70,8 +90,54 @@ function setupRouter(): void {
       });
 
       const results = await Promise.all(promises);
-      songloft.log.info('aggregate/hotboard: done, platforms=' + results.length);
-      return jsonResponse({ code: 0, msg: 'success', data: results });
+
+      // 合并所有平台的新闻
+      const allNews: any[] = [];
+      const dedupMap = new Map<string, any>();
+
+      for (const { source, news } of results) {
+        for (const item of news) {
+          if (!item.title) continue;
+          // 标题去重：归一化后比较（去空格、转小写、去标点）
+          const key = normalizeTitle(item.title);
+          if (!key) continue;
+
+          const existing = dedupMap.get(key);
+          if (existing) {
+            // 已存在：合并来源，取最高 hotLevel，热度叠加
+            existing.sources.push(source);
+            existing.hotLevel = Math.max(existing.hotLevel, item.hotLevel);
+            existing.hotCount = (existing.hotCount || 1) + 1;
+            // 保留信息更完整的一条（有摘要/封面的优先）
+            if ((!existing.summary && item.summary) || (!existing.cover && item.cover)) {
+              existing.summary = existing.summary || item.summary;
+              existing.cover = existing.cover || item.cover;
+              existing.url = existing.url || item.url;
+            }
+          } else {
+            dedupMap.set(key, { ...item, hotCount: 1 });
+          }
+        }
+      }
+
+      // 转数组，计算综合热度：hotLevel * (1 + 0.15 * (hotCount-1))
+      // 多平台同时上榜说明热度高，给予加成
+      const merged = Array.from(dedupMap.values()).map((item: any) => {
+        const multiSourceBonus = 1 + 0.15 * (item.hotCount - 1);
+        return {
+          ...item,
+          combinedHot: Math.round(item.hotLevel * multiSourceBonus),
+        };
+      });
+
+      // 按综合热度降序
+      merged.sort((a, b) => b.combinedHot - a.combinedHot);
+
+      // 截取 limit 条
+      const top = merged.slice(0, limit);
+
+      songloft.log.info('aggregate/hotboard: merged=' + merged.length + ' top=' + top.length);
+      return jsonResponse({ code: 0, msg: 'success', data: { news: top, bySource: results } });
     } catch (e) {
       songloft.log.error('aggregate/hotboard error:', e);
       return jsonResponse({ code: 500, msg: 'Failed: ' + (e as Error).message }, 500);
