@@ -19,7 +19,12 @@ import type { NewsItem } from '../types';
  *   宿主播放时会回调 /api/music/url，从 sourceData 解析出TTS文本生成URL
  */
 function newsToSongInput(news: NewsItem): CreateSongInput | null {
-  if (!news || !news.id || !news.title) return null;
+  if (!news || !news.title) return null;
+
+  // 空 id 生成 fallback，避免 dedupKey 无效
+  const newsId = news.id || crypto.md5(
+    (news.source || 'unknown') + ':' + (news.title || '')
+  ).slice(0, 16);
 
   const isTts = !news.audioUrl;
   const ttsText = news.title + '。' + (news.summary || '');
@@ -27,7 +32,7 @@ function newsToSongInput(news: NewsItem): CreateSongInput | null {
   const estimatedDuration = isTts ? Math.ceil(ttsText.length / 240 * 60) : (news.audioDuration || 0);
 
   const sourceData = JSON.stringify({
-    newsId: news.id,
+    newsId,
     source: news.source,
     sourceUrl: news.url,
     isTts,
@@ -43,7 +48,7 @@ function newsToSongInput(news: NewsItem): CreateSongInput | null {
     coverUrl: news.cover,
     duration: estimatedDuration,
     sourceData,
-    dedupKey: `${news.source}:${news.id}`,
+    dedupKey: `${news.source}:${newsId}`,
   };
 }
 
@@ -307,8 +312,8 @@ export function createPlayerHandlers() {
         const inputs: CreateSongInput[] = [];
         const skipped: { id: string; title: string; reason: string }[] = [];
         for (const n of newsList) {
-          if (!n || !n.id || !n.title) {
-            skipped.push({ id: n?.id || '', title: n?.title || '', reason: 'missing id/title' });
+          if (!n || !n.title) {
+            skipped.push({ id: n?.id || '', title: n?.title || '', reason: 'missing title' });
             continue;
           }
           const input = newsToSongInput(n);

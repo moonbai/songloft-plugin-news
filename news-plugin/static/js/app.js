@@ -673,6 +673,8 @@ function renderPlayActions(item) {
   const hasAudio = !!item.audioUrl;
   // 朗读按钮始终显示（使用在线TTS，不依赖浏览器能力）
   const supportsTts = item.ttsEnabled !== false;
+  // 只要有音频或支持TTS就可以加入官方歌单
+  const canAddToHost = hasAudio || supportsTts;
 
   // 无音频且无 TTS 时不渲染整个按钮组（仅显示"查看正文"由列表点击触发）
   if (!hasAudio && !supportsTts) {
@@ -687,7 +689,7 @@ function renderPlayActions(item) {
     <div class="play-actions" data-id="${escapeHtml(item.id)}" data-source="${escapeHtml(item.source)}">
       ${hasAudio ? `<button class="play-btn" data-action="play-audio" data-url="${escapeHtml(item.audioUrl)}">▶ 播放音频</button>` : ''}
       ${supportsTts ? `<button class="play-btn tts" data-action="play-tts">🔊 朗读</button>` : ''}
-      ${hasAudio ? `<button class="play-btn host" data-action="add-to-host" title="加入宿主歌曲库">⭐ 加入歌单</button>` : ''}
+      ${canAddToHost ? `<button class="play-btn host" data-action="add-to-host" title="加入宿主歌曲库">⭐ 加入歌单</button>` : ''}
       <button class="play-btn add" data-action="add-playlist">+ 播放列表</button>
     </div>
   `;
@@ -778,10 +780,6 @@ function attachNewsItemHandlers(container) {
             showToast('添加失败: ' + result.msg, 'error');
           }
         } else if (action === 'add-to-host') {
-          if (!playItem.audioUrl) {
-            showSnack('该新闻无音频，无法加入歌单', 'info');
-            return;
-          }
           if (!P) {
             showSnack('宿主桥接不可用，请在 Songloft 应用中打开', 'error');
             return;
