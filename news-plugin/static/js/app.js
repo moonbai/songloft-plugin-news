@@ -1,3 +1,121 @@
+// Edge TTS 客户端 - 微软在线 TTS 服务（作为 speechSynthesis 的 fallback）
+class EdgeTTSClient {
+  constructor() {
+    this.voice = 'zh-CN-XiaoxiaoNeural';
+    this.rate = '0%';
+    this.pitch = '0Hz';
+    this.volume = '100%';
+  }
+
+  setConfig(config) {
+    if (config.voice) this.voice = config.voice;
+    if (config.rate != null) this.rate = Math.round((config.rate - 1) * 100) + '%';
+    if (config.pitch != null) this.pitch = Math.round((config.pitch - 1) * 100) + 'Hz';
+    if (config.volume != null) this.volume = Math.round(config.volume * 100) + '%';
+  }
+
+  async synthesize(text) {
+    return new Promise((resolve, reject) => {
+      const ws = new WebSocket('wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=6A5AA1D4EAFF4E9FB37E23D68491D6F4');
+      const audioChunks = [];
+      let hasError = false;
+
+      ws.binaryType = 'arraybuffer';
+
+      ws.onopen = () => {
+        const ssml = `
+<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="zh-CN">
+  <voice name="${this.voice}">
+    <prosody rate="${this.rate}" pitch="${this.pitch}" volume="${this.volume}">
+      ${this._escapeXml(text)}
+    </prosody>
+  </voice>
+</speak>`.trim();
+
+        const configMessage = `Content-Type:application/json; charset=utf-8\r\nX-RequestId:${this._generateId()}\r\nX-Timestamp:${new Date().toISOString()}\r\n\r\n${JSON.stringify({
+          context: {
+            synthesis: {
+              audio: {
+                metadataoptions: { sentenceBoundaryEnabled: false, wordBoundaryEnabled: false },
+                outputFormat: 'audio-24khz-48kbitrate-mono-mp3'
+              }
+            }
+          }
+        })}`;
+
+        const ssmlMessage = `Content-Type:application/ssml+xml\r\nX-RequestId:${this._generateId()}\r\nX-Timestamp:${new Date().toISOString()}\r\n\r\n${ssml}`;
+
+        ws.send(configMessage);
+        setTimeout(() => ws.send(ssmlMessage), 100);
+      };
+
+      ws.onmessage = (event) => {
+        if (typeof event.data === 'string') {
+          const data = event.data;
+          if (data.includes('Path:turn.end')) {
+            ws.close();
+          }
+        } else if (event.data instanceof ArrayBuffer) {
+          const buffer = new Uint8Array(event.data);
+          const separator = '\r\n\r\n';
+          const headerEnd = this._findHeaderEnd(buffer);
+          if (headerEnd > 0) {
+            const audioData = buffer.slice(headerEnd);
+            audioChunks.push(audioData);
+          }
+        }
+      };
+
+      ws.onclose = () => {
+        if (hasError) return;
+        if (audioChunks.length === 0) {
+          reject(new Error('没有接收到音频数据'));
+          return;
+        }
+        const blob = new Blob(audioChunks, { type: 'audio/mpeg' });
+        resolve(URL.createObjectURL(blob));
+      };
+
+      ws.onerror = (e) => {
+        hasError = true;
+        reject(new Error('Edge TTS 连接失败'));
+      };
+    });
+  }
+
+  _findHeaderEnd(buffer) {
+    const separator = new TextEncoder().encode('\r\n\r\n');
+    for (let i = 0; i <= buffer.length - separator.length; i++) {
+      let found = true;
+      for (let j = 0; j < separator.length; j++) {
+        if (buffer[i + j] !== separator[j]) {
+          found = false;
+          break;
+        }
+      }
+      if (found) return i + separator.length;
+    }
+    return -1;
+  }
+
+  _generateId() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      const r = Math.random() * 16 | 0;
+      const v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  }
+
+  _escapeXml(text) {
+    return String(text || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
+  }
+}
+
 // 全局新闻播放器 - 支持音频播放 + TTS 朗读双模式
 
 class NewsPlayer {
@@ -18,7 +136,10 @@ class NewsPlayer {
       volume: 1.0,
       autoPlayNext: true,
       enableTts: true,
+      useEdgeTts: true,
     };
+    this.edgeTts = new EdgeTTSClient();
+    this._edgeTtsAudioUrl = null;
     
     this._setupAudioEvents();
     this._loadTtsConfig();
@@ -251,40 +372,93 @@ class NewsPlayer {
       this.isPlaying = true;
       this._emit('play', { item: this.currentItem, mode: 'tts' });
 
-      // 检查 speechSynthesis API
-      if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
-        songloftToast && songloftToast('当前环境不支持语音朗读（无 speechSynthesis API）', 'error');
-        this._openOriginalUrl(news);
-        return;
+      // 策略：优先尝试 speechSynthesis，如果不可用或失败，自动降级到 Edge TTS
+      const canUseSpeechSynth = this._checkSpeechSynthesis();
+
+      if (canUseSpeechSynth) {
+        try {
+          const ok = await this._waitForVoices(3000);
+          if (ok) {
+            const zhVoice = this._pickChineseVoice();
+            if (zhVoice) {
+              console.log('[TTS] using speechSynthesis with voice:', zhVoice.lang, zhVoice.name);
+            } else {
+              console.warn('[TTS] no Chinese voice found, using default');
+            }
+            await this._speakSegments(ttsScript, zhVoice);
+            return;
+          }
+        } catch (e) {
+          console.warn('[TTS] speechSynthesis failed, falling back to Edge TTS:', e);
+        }
       }
 
-      // 等待 voices 异步加载完成（最多 3 秒）
-      console.log('[TTS] waiting for voices...');
-      const ok = await this._waitForVoices(3000);
-      console.log('[TTS] voices ready:', ok);
-
-      if (!ok) {
-        const voices = window.speechSynthesis.getVoices();
-        const msg = voices.length === 0
-          ? '当前环境没有可用语音包（请安装中文 TTS 语音）'
-          : 'speechSynthesis 不可用';
-        songloftToast && songloftToast(msg, 'error');
-        this._openOriginalUrl(news);
-        return;
-      }
-
-      // 自动选择中文 voice
-      const zhVoice = this._pickChineseVoice();
-      if (zhVoice) {
-        console.log('[TTS] picked voice:', zhVoice.lang, zhVoice.name);
+      // 降级到 Edge TTS
+      if (this.ttsConfig.useEdgeTts !== false) {
+        console.log('[TTS] using Edge TTS as fallback');
+        songloftToast && songloftToast('正在使用在线 TTS 朗读...', 'info');
+        await this._playTtsWithEdge(ttsScript);
       } else {
-        console.warn('[TTS] no Chinese voice found, falling back to default');
+        songloftToast && songloftToast('当前环境不支持语音朗读', 'error');
+        this._openOriginalUrl(news);
       }
-
-      await this._speakSegments(ttsScript, zhVoice);
     } catch (e) {
       console.error('[TTS] _playTts error:', e);
       songloftToast && songloftToast('TTS 失败: ' + (e && e.message ? e.message : String(e)), 'error');
+    }
+  }
+
+  _checkSpeechSynthesis() {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      console.warn('[TTS] speechSynthesis API not available');
+      return false;
+    }
+    if (typeof SpeechSynthesisUtterance === 'undefined') {
+      console.warn('[TTS] SpeechSynthesisUtterance not available');
+      return false;
+    }
+    return true;
+  }
+
+  async _playTtsWithEdge(segments) {
+    // 合并所有文本段（跳过 pause 类型）
+    const textParts = [];
+    for (const seg of segments) {
+      if (seg.type !== 'pause' && seg.text && seg.text.trim()) {
+        textParts.push(seg.text.trim());
+      }
+    }
+    const fullText = textParts.join('。');
+    
+    if (!fullText) {
+      songloftToast && songloftToast('没有可朗读的文本', 'info');
+      return;
+    }
+
+    try {
+      this.edgeTts.setConfig({
+        rate: this.ttsConfig.rate,
+        pitch: this.ttsConfig.pitch,
+        volume: this.ttsConfig.volume,
+      });
+
+      // 清理之前的 audio URL
+      if (this._edgeTtsAudioUrl) {
+        URL.revokeObjectURL(this._edgeTtsAudioUrl);
+        this._edgeTtsAudioUrl = null;
+      }
+
+      const audioUrl = await this.edgeTts.synthesize(fullText);
+      this._edgeTtsAudioUrl = audioUrl;
+
+      this.audio.src = audioUrl;
+      this.audio.playbackRate = 1.0;
+      this.audio.volume = this.ttsConfig.volume;
+      await this.audio.play();
+    } catch (e) {
+      console.error('[TTS] Edge TTS failed:', e);
+      songloftToast && songloftToast('在线 TTS 失败: ' + (e.message || String(e)), 'error');
+      throw e;
     }
   }
 
@@ -407,16 +581,16 @@ class NewsPlayer {
   pause() {
     if (this.audio.src && !this.audio.paused) {
       this.audio.pause();
-    } else {
-      window.speechSynthesis && window.speechSynthesis.pause();
+    } else if (window.speechSynthesis && !window.speechSynthesis.paused) {
+      window.speechSynthesis.pause();
     }
   }
   
   resume() {
     if (this.audio.src && this.audio.paused) {
       this.audio.play();
-    } else {
-      window.speechSynthesis && window.speechSynthesis.resume();
+    } else if (window.speechSynthesis && window.speechSynthesis.paused) {
+      window.speechSynthesis.resume();
     }
   }
   
@@ -495,7 +669,13 @@ class NewsPlayer {
     this.isPlaying = false;
     this.audio.pause();
     this.audio.removeAttribute('src');
-    window.speechSynthesis && window.speechSynthesis.cancel();
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+    if (this._edgeTtsAudioUrl) {
+      URL.revokeObjectURL(this._edgeTtsAudioUrl);
+      this._edgeTtsAudioUrl = null;
+    }
   }
   
   stop() {
@@ -1556,11 +1736,7 @@ async function initImportUI() {
         showSnack('暂无可导入的新闻', 'info');
         return;
       }
-      const newsItems = result.data.news.filter(n => !!n.audioUrl);
-      if (newsItems.length === 0) {
-        showSnack('暂无带音频的新闻', 'info');
-        return;
-      }
+      const newsItems = result.data.news;
       btnBatchImport.disabled = true;
       btnBatchImport.innerHTML = '<span>⏳ 导入中...</span>';
       try {

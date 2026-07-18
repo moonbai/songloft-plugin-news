@@ -7,9 +7,10 @@
 //   4. 插件返回真实可播放 URL（+可选 headers，如 Referer）
 //   5. 宿主用原生播放器播放该 URL
 //
-// 注意：百度TTS接口已失效（返回 502 "Not verified user"），
-// TTS 朗读只能依赖插件 WebView 内的浏览器原生 speechSynthesis，
-// 不再在宿主原生播放器中播放 TTS 新闻。
+// TTS 新闻播放方案：
+//   - source_data 中携带 ttsText 和 isTts 标记
+//   - 宿主请求 /api/music/url 时，返回插件内的 TTS 音频流 URL
+//   - 宿主访问该 URL 时，插件通过 Edge TTS 实时生成音频并返回
 
 import {
   createSearchHandler,
@@ -19,7 +20,7 @@ import type { SearchResultItem } from '@songloft/plugin-sdk';
 import { platformModules } from '../newsSdk/facade';
 import type { NewsItem } from '../types';
 
-// 只在这些源里搜可播放内容（已全部为文字源，需通过 TTS 朗读）
+// 只在这些源里搜可播放内容（全部为文字源，通过 Edge TTS 朗读）
 const PLAYABLE_SOURCES = ['weibo', 'zhihu', 'baidu', '36kr', 'ithome', 'huxiu', 'sspai', 'juejin', 'toutiao', 'pengpai', 'wangyi'];
 
 interface NewsSourceData {
@@ -62,9 +63,9 @@ function newsToSearchResult(n: NewsItem): SearchResultItem {
     .replace(/https?:\/\/[^\s<]+/gi, '')
     .replace(/\s+/g, ' ')
     .trim()
-    .slice(0, 200);
+    .slice(0, 500);
   // 估算时长：中文约240字/分钟
-  const estimatedDuration = isTts ? Math.ceil(ttsText.length / 240 * 60) : (n.audioDuration || 0);
+  const estimatedDuration = isTts ? Math.max(10, Math.ceil(ttsText.length / 240 * 60)) : (n.audioDuration || 0);
 
   return {
     title: n.title,
@@ -123,8 +124,7 @@ export const hostSearchHandler = createSearchHandler({
  * body: { source_data, fallback? }
  * resp: { url, headers? } 或 { error: 'source_not_available' }
  *
- * 注意：百度TTS已失效，TTS新闻无法在宿主原生播放器中播放，
- * 这里只返回原生音频URL（如果有），否则抛错让宿主降级。
+ * TTS 新闻：返回插件内的 TTS 音频流 URL，宿主访问时实时生成音频
  */
 export const hostMusicUrlHandler = createMusicUrlHandler({
   async resolveUrl(sourceData: Record<string, unknown>) {
@@ -138,9 +138,13 @@ export const hostMusicUrlHandler = createMusicUrlHandler({
       return { url: sd.audioUrl };
     }
 
-    // TTS 新闻：宿主原生播放器无法播放，明确报错
-    if (sd.isTts) {
-      throw new Error('TTS news cannot be played in native player, please use plugin webview');
+    // TTS 新闻：返回插件内的 TTS 音频流 URL
+    // 宿主会通过这个 URL 获取音频流，插件实时用 Edge TTS 生成
+    if (sd.isTts && sd.ttsText) {
+      const ttsParam = encodeURIComponent(sd.ttsText);
+      const titleParam = encodeURIComponent(sd.title || '');
+      // 返回相对路径，宿主会自动拼接插件的基础 URL
+      return { url: `/api/player/tts-stream?text=${ttsParam}&title=${titleParam}` };
     }
 
     // 没有音频也不是TTS的，返回错误
@@ -157,15 +161,25 @@ export const hostMusicUrlHandler = createMusicUrlHandler({
         if (!boards.length) continue;
         const result = await module.hotboard.list(boards[0].id, 1, 30);
         const match = result.news.find(n =>
-          n.audioUrl && n.title.includes(hint.title)
+          n.title && n.title.includes(hint.title)
         );
         if (match) {
+          const isTts = !match.audioUrl;
+          const ttsText = (match.title + '。' + (match.summary || ''))
+            .replace(/<[^>]+>/g, '')
+            .replace(/&[a-z]+;/gi, ' ')
+            .replace(/https?:\/\/[^\s<]+/gi, '')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .slice(0, 500);
           return {
             source_data: {
               source: match.source,
               newsId: match.id,
               audioUrl: match.audioUrl,
               title: match.title,
+              isTts,
+              ttsText,
             } as NewsSourceData,
             title: match.title,
             artist: match.sourceName,

@@ -78,6 +78,7 @@ function setupRouter(): void {
   router.get('/api/player/playable', playerHandlers.getPlayableNews);
   router.post('/api/player/register-song', playerHandlers.registerSong);
   router.post('/api/player/register-batch', playerHandlers.registerBatch);
+  router.get('/api/player/tts-stream', playerHandlers.ttsStream);
 
   // TTS 音频接口 - 百度TTS已失效（返回502 "Not verified user"），
   // 此端点保留以兼容旧前端调用，但返回明确错误。

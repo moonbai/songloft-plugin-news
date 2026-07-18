@@ -1,5 +1,35 @@
 # 更新日志
 
+## v1.4.0 (2026-07-21)
+
+### 重大修复 - 全面解决播放问题
+
+#### 核心问题
+- **所有新闻都不能播放**：由于所有新闻源都是文字源，且 Flutter WebView 可能不支持 speechSynthesis API，导致 TTS 朗读完全失效
+
+#### 解决方案 - 集成 Edge TTS（微软在线 TTS）
+
+##### 前端 (app.js)
+- 新增 `EdgeTTSClient` 类：通过 WebSocket 连接微软 Edge TTS 服务，生成高质量中文语音
+- **双重 TTS 策略**：优先使用浏览器原生 speechSynthesis，失败时自动降级到 Edge TTS
+- 支持语音参数配置：语速、音调、音量同步应用到 Edge TTS
+- 自动清理 Blob URL，避免内存泄漏
+
+##### 后端
+- 新增 `src/player/edgeTts.ts`：Edge TTS 后端客户端，支持 WebSocket 通信和音频缓存
+- 新增 `GET /api/player/tts-stream`：TTS 音频流接口，实时生成 MP3 音频并返回
+- 支持 LRU 缓存（最多 20 条），避免重复生成相同文本的音频
+
+##### 宿主原生播放器支持
+- **`hostMusicUrlHandler`**：TTS 新闻不再报错，而是返回插件内 TTS 音频流 URL
+- **`newsToSongInput`**：TTS 新闻的 url 字段指向 `/api/player/tts-stream`，通过 `songloft.songs.create` 创建的歌曲可直接播放
+- **fallbackSearch**：支持按标题在各平台搜索 TTS 新闻作为备选
+
+##### 其他改进
+- TTS 文本长度限制从 200 字提升到 500 字，播放更完整
+- 估算时长最少 10 秒，避免过短导致显示异常
+- 批量导入歌单时不再过滤无音频的新闻（TTS 新闻现在也能播放）
+
 ## v1.3.4 (2026-07-18)
 
 ### 新增 - 接入宿主原生歌曲库（方案 A）

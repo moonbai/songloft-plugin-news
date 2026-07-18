@@ -8,13 +8,14 @@ import {
   getTtsConfig, setTtsConfig,
   buildTtsScript,
 } from '../player';
+import { synthesizeWithCache } from '../player/edgeTts';
 import type { PlaylistItem, TtsConfig } from '../player';
 import type { NewsItem } from '../types';
 
 /**
  * 把 NewsItem 转成官方 songs.create 的入参
- * 注意：百度TTS已失效，TTS新闻只保留元数据（url 留空），
- * 仅在插件 WebView 内通过浏览器原生 speechSynthesis 朗读。
+ * - 原生音频：url 填 audioUrl
+ * - TTS 新闻：url 填插件内的 TTS 音频流接口，宿主播放时实时生成音频
  */
 function newsToSongInput(news: NewsItem): CreateSongInput | null {
   if (!news || !news.title) return null;
@@ -34,14 +35,20 @@ function newsToSongInput(news: NewsItem): CreateSongInput | null {
     .replace(/https?:\/\/[^\s<]+/gi, '')
     .replace(/\s+/g, ' ')
     .trim()
-    .slice(0, 200);
+    .slice(0, 500);
 
   // 估算时长：中文约240字/分钟
-  const estimatedDuration = isTts ? Math.ceil(ttsText.length / 240 * 60) : (news.audioDuration || 0);
+  const estimatedDuration = isTts ? Math.max(10, Math.ceil(ttsText.length / 240 * 60)) : (news.audioDuration || 0);
 
-  // TTS 模式 url 留空（百度TTS已失效，无法在宿主原生播放器播放）
-  // 原生音频模式 url 填 audioUrl
-  const url = isTts ? '' : (news.audioUrl || '');
+  // TTS 模式：url 填插件内的 TTS 音频流接口
+  // 原生音频模式：url 填 audioUrl
+  let url: string;
+  if (isTts) {
+    const ttsParam = encodeURIComponent(ttsText);
+    url = `/api/player/tts-stream?text=${ttsParam}`;
+  } else {
+    url = news.audioUrl || '';
+  }
 
   const sourceData = JSON.stringify({
     newsId,
@@ -386,6 +393,61 @@ export function createPlayerHandlers() {
         });
       } catch (e) {
         return errorResponse('Register batch failed: ' + (e as Error).message);
+      }
+    },
+
+    /**
+     * TTS 音频流接口 - 供宿主原生播放器调用
+     * 通过 Edge TTS 实时生成 MP3 音频并返回
+     */
+    async ttsStream(req: HTTPRequest) {
+      try {
+        const query = parseQuery(req.query);
+        const text = String(query.text || '').trim();
+        const voice = String(query.voice || 'zh-CN-XiaoxiaoNeural');
+        const rate = query.rate ? Number(query.rate) : 1.0;
+        const pitch = query.pitch ? Number(query.pitch) : 1.0;
+        const volume = query.volume ? Number(query.volume) : 1.0;
+
+        if (!text) {
+          return {
+            statusCode: 400,
+            headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+            body: 'text parameter is required',
+          };
+        }
+
+        if (text.length > 5000) {
+          return {
+            statusCode: 400,
+            headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+            body: 'text too long (max 5000 chars)',
+          };
+        }
+
+        songloft.log.info('ttsStream: generating audio for text length=' + text.length);
+
+        const audioBuffer = await synthesizeWithCache(text, { voice, rate, pitch, volume });
+
+        songloft.log.info('ttsStream: audio generated, size=' + audioBuffer.length);
+
+        return {
+          statusCode: 200,
+          headers: {
+            'Content-Type': 'audio/mpeg',
+            'Content-Length': String(audioBuffer.length),
+            'Cache-Control': 'public, max-age=86400',
+            'Accept-Ranges': 'bytes',
+          },
+          body: audioBuffer,
+        };
+      } catch (e) {
+        songloft.log.error('ttsStream error: ' + (e as Error).message);
+        return {
+          statusCode: 500,
+          headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+          body: 'TTS generation failed: ' + (e as Error).message,
+        };
       }
     },
   };
