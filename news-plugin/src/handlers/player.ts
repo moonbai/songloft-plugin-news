@@ -298,15 +298,15 @@ export function createPlayerHandlers() {
         }
 
         if (inputs.length === 0) {
-          return successResponse({ created: 0, skipped: skipped.length, skipped });
+          return successResponse({ created: 0, skippedCount: skipped.length, skippedItems: skipped });
         }
 
         const songs: Song[] = await songloft.songs.create(inputs);
         return successResponse({
           created: songs.length,
           songs,
-          skipped: skipped.length,
-          skipped,
+          skippedCount: skipped.length,
+          skippedItems: skipped,
         });
       } catch (e) {
         return errorResponse('Register batch failed: ' + (e as Error).message);

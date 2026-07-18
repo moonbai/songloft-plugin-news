@@ -131,6 +131,25 @@ input:checked + .slider:before { transform: translateX(18px); }
 .play-mode-toolbar { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 .play-mode-toolbar select, .play-mode-toolbar button { padding: 6px 12px; border: 1px solid var(--news-outline); border-radius: 4px; background: var(--news-surface); color: var(--news-on-surface); }
 .play-mode-toolbar button { background: var(--news-primary); color: var(--news-on-primary); border: none; cursor: pointer; }
+
+.import-toolbar { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.import-toolbar select, .import-toolbar button { padding: 6px 12px; border: 1px solid var(--news-outline); border-radius: 4px; background: var(--news-surface); color: var(--news-on-surface); font-size: 14px; }
+.import-toolbar button { background: var(--news-primary); color: var(--news-on-primary); border: none; cursor: pointer; }
+.import-toolbar button:hover { opacity: 0.9; }
+
+.import-result { background: var(--news-surface-container); border-radius: 8px; padding: 16px; margin-bottom: 16px; border-left: 4px solid var(--news-success); }
+.import-result .result-item { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.import-result .result-item:last-child { margin-bottom: 0; }
+.import-result .result-icon { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+.import-result .result-icon.success { background: color-mix(in srgb, var(--news-success) 15%, transparent); color: var(--news-success); }
+.import-result .result-icon.info { background: color-mix(in srgb, var(--news-primary) 15%, transparent); color: var(--news-primary); }
+.import-result .result-text { font-size: 14px; color: var(--news-on-surface); }
+.import-result .result-num { font-weight: 600; color: var(--news-primary); }
+
+.modal-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 16px; }
+.modal-actions button { padding: 8px 16px; border: 1px solid var(--news-outline); border-radius: 6px; cursor: pointer; font-size: 14px; }
+.modal-actions button#dialog-confirm { background: var(--news-primary); color: var(--news-on-primary); border: none; }
+.modal-actions button#dialog-cancel { background: var(--news-surface-variant); color: var(--news-on-surface-variant); }
 .danger-btn { background: var(--news-error) !important; color: var(--news-on-primary) !important; border: none !important; cursor: pointer; padding: 6px 12px; border-radius: 4px; }
 
 /* 播放器面板 */

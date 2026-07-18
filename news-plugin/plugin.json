@@ -7,7 +7,8 @@
   "permissions": [
     "storage",
     "jsenv",
-    "songs.write"
+    "songs.write",
+    "playlists.read"
   ],
   "publicPaths": [
     "/api"
@@ -17,6 +18,6 @@
   "homepage": "https://github.com/moonbai/songloft-plugin-news",
   "updateUrl": "https://github.com/moonbai/songloft-plugin-news/raw/main/news-plugin/plugin.json",
   "download_url": "https://github.com/moonbai/songloft-plugin-news/releases/download/v1.3.7/news.jsplugin.zip",
-  "entryHash": "dcfb882bfc11b0d3f2258611042f1ed2135b41cfd54225d9bbeabd82979a29b2",
-  "zipHash": "8cb836583254c043427659188068f61131e92ee7272ee3163f8995f870b9ed0c"
+  "entryHash": "6545154b377bdbbe65ee6d10b166bfd25b0c19e4e28d58380953c8575af45749",
+  "zipHash": "d7c1eac0fcde1754315ff1cfedc0609ab87d60dd166f9d70648b45177eca07e6"
 }

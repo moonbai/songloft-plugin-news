@@ -67,6 +67,11 @@
       <section class="panel" id="panel-player">
         <div class="toolbar">
           <h2>可播放新闻</h2>
+          <div class="import-toolbar">
+            <select id="playlist-select"></select>
+            <button id="btn-new-playlist">+ 新歌单</button>
+            <button id="btn-batch-import">批量导入到歌单</button>
+          </div>
           <div class="play-mode-toolbar">
             <label>播放模式：</label>
             <select id="playerMode">
@@ -77,6 +82,7 @@
             <button id="playAllBtn">▶ 全部播放</button>
           </div>
         </div>
+        <div id="import-result" class="import-result" style="display:none"></div>
         <div id="playableList" class="news-list"></div>
       </section>
 
@@ -158,6 +164,17 @@ lx.notifyInited([musicSdk]);</code></pre>
         <div class="content" id="detailContent"></div>
         <div class="actions">
           <a id="detailLink" target="_blank" class="btn">查看原文</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal" id="newPlaylistModal">
+      <div class="modal-content">
+        <h3>新建歌单</h3>
+        <input type="text" id="new-playlist-name" placeholder="输入歌单名称">
+        <div class="modal-actions">
+          <button id="dialog-cancel">取消</button>
+          <button id="dialog-confirm">创建</button>
         </div>
       </div>
     </div>

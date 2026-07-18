@@ -417,8 +417,23 @@ class NewsPlayer {
 
 // 前端应用
 const API_BASE = './api';
+const MAIN_API = '/api/v1';
 let player = null;
 let currentTab = 'hotboard';
+let playlists = [];
+let targetPlaylistId = 2;
+
+const P = (typeof window !== 'undefined' && window.SongloftPlugin) ? window.SongloftPlugin : null;
+
+function showSnack(msg, type) {
+  const snackbar = document.getElementById('toast');
+  snackbar.textContent = msg;
+  snackbar.className = 'toast show' + (type ? ' ' + type : '');
+  clearTimeout(window.snackTimer);
+  window.snackTimer = setTimeout(function () {
+    snackbar.className = 'toast';
+  }, 3000);
+}
 
 async function api(path, options = {}) {
   try {
@@ -440,6 +455,93 @@ async function fetchJson(path, options) {
   } catch (e) {
     return { code: -1, msg: text || '响应解析失败' };
   }
+}
+
+async function mainApiFetch(method, path, body) {
+  if (!P) throw new Error('宿主桥接不可用');
+  const token = P.getAuthToken ? P.getAuthToken() : null;
+  if (!token) throw new Error('无法获取认证 Token');
+  const opts = {
+    method: method,
+    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+  };
+  if (body !== undefined) opts.body = JSON.stringify(body);
+  const resp = await fetch(MAIN_API + path, opts);
+  const text = await resp.text();
+  if (!resp.ok) {
+    let msg = 'HTTP ' + resp.status;
+    try {
+      const j = JSON.parse(text);
+      msg = j.error || j.message || msg;
+    } catch (e) {}
+    throw new Error(msg);
+  }
+  return text ? JSON.parse(text) : null;
+}
+
+async function loadPlaylists() {
+  if (!P) return;
+  try {
+    const data = await P.apiGet('/api/playlists');
+    playlists = data.playlists || [];
+    renderPlaylistSelect();
+  } catch (e) {
+    console.warn('加载歌单失败:', e);
+  }
+}
+
+async function loadSettings() {
+  if (!P) return;
+  try {
+    const data = await P.apiGet('/api/settings');
+    if (data && data.last_playlist_id) {
+      targetPlaylistId = data.last_playlist_id;
+      const select = document.getElementById('playlist-select');
+      if (select) select.value = String(targetPlaylistId);
+    }
+  } catch (e) {}
+}
+
+function renderPlaylistSelect() {
+  const select = document.getElementById('playlist-select');
+  if (!select) return;
+  select.innerHTML = '';
+  playlists.forEach(function (pl) {
+    var opt = document.createElement('option');
+    opt.value = pl.id;
+    opt.textContent = pl.name;
+    select.appendChild(opt);
+  });
+  select.value = String(targetPlaylistId);
+}
+
+function createNewsPlaylist(name = '新闻资讯') {
+  return mainApiFetch('POST', '/playlists', { name: name, type: 'radio' });
+}
+
+async function importNewsToHost(newsItems) {
+  if (!P) throw new Error('宿主桥接不可用');
+
+  const radios = newsItems.map(n => ({
+    url: n.audioUrl,
+    title: n.title,
+    artist: n.sourceName || n.author || n.source || '',
+    cover_url: n.cover || '',
+  }));
+
+  const songResult = await mainApiFetch('POST', '/songs/radio', radios);
+  const songIds = (songResult.songs || []).map(s => s.id);
+
+  if (songIds.length === 0) {
+    throw new Error('未创建任何歌曲');
+  }
+
+  const playlistResult = await mainApiFetch('POST', `/playlists/${targetPlaylistId}/songs`, { song_ids: songIds });
+  return {
+    created: songIds.length,
+    added: playlistResult.added || 0,
+    skipped: playlistResult.skipped || 0,
+  };
 }
 
 function showToast(msg, type = 'info') {
@@ -576,29 +678,25 @@ function attachNewsItemHandlers(container) {
             showToast('添加失败: ' + result.msg, 'error');
           }
         } else if (action === 'add-to-host') {
-          // 方案 A：注册到宿主原生歌曲库
           if (!playItem.audioUrl) {
-            showToast('该新闻无音频，无法加入歌单', 'info');
+            showSnack('该新闻无音频，无法加入歌单', 'info');
+            return;
+          }
+          if (!P) {
+            showSnack('宿主桥接不可用，请在 Songloft 应用中打开', 'error');
             return;
           }
           const original = btn.textContent;
-          btn.textContent = '⏳ 注册中...';
+          btn.textContent = '⏳ 导入中...';
           btn.disabled = true;
           try {
-            const result = await api('/player/register-song', {
-              method: 'POST',
-              body: JSON.stringify({ news: playItem }),
-            });
-            if (result.code === 0 && result.data?.songId) {
-              showToast(`已加入宿主歌单（songId: ${result.data.songId}）`, 'success');
-              btn.textContent = '✓ 已加入歌单';
-              btn.classList.add('added');
-            } else {
-              showToast('加入失败: ' + (result.msg || '未知错误'), 'error');
-              btn.textContent = original;
-            }
+            await loadPlaylists();
+            const result = await importNewsToHost([playItem]);
+            showSnack(`${result.created} 个已创建，${result.added} 个已加入歌单${result.skipped > 0 ? `，${result.skipped} 个已跳过` : ''}`, 'success');
+            btn.textContent = '✓ 已加入歌单';
+            btn.classList.add('added');
           } catch (e) {
-            showToast('加入失败: ' + (e && e.message ? e.message : String(e)), 'error');
+            showSnack('加入失败: ' + (e && e.message ? e.message : String(e)), 'error');
             btn.textContent = original;
           } finally {
             btn.disabled = false;
@@ -896,27 +994,24 @@ function attachPlaylistHandlers(container, list) {
           }
         } else if (action === 'add-to-host') {
           if (!item.audioUrl) {
-            showToast('该新闻无音频，无法加入歌单', 'info');
+            showSnack('该新闻无音频，无法加入歌单', 'info');
+            return;
+          }
+          if (!P) {
+            showSnack('宿主桥接不可用，请在 Songloft 应用中打开', 'error');
             return;
           }
           const original = btn.textContent;
-          btn.textContent = '⏳ 注册中...';
+          btn.textContent = '⏳ 导入中...';
           btn.disabled = true;
           try {
-            const result = await api('/player/register-song', {
-              method: 'POST',
-              body: JSON.stringify({ news: item }),
-            });
-            if (result.code === 0 && result.data?.songId) {
-              showToast(`已加入宿主歌单（songId: ${result.data.songId}）`, 'success');
-              btn.textContent = '✓ 已加入歌单';
-              btn.classList.add('added');
-            } else {
-              showToast('加入失败: ' + (result.msg || '未知错误'), 'error');
-              btn.textContent = original;
-            }
+            await loadPlaylists();
+            const result = await importNewsToHost([item]);
+            showSnack(`${result.created} 个已创建，${result.added} 个已加入歌单${result.skipped > 0 ? `，${result.skipped} 个已跳过` : ''}`, 'success');
+            btn.textContent = '✓ 已加入歌单';
+            btn.classList.add('added');
           } catch (e) {
-            showToast('加入失败: ' + (e && e.message ? e.message : String(e)), 'error');
+            showSnack('加入失败: ' + (e && e.message ? e.message : String(e)), 'error');
             btn.textContent = original;
           } finally {
             btn.disabled = false;
@@ -1164,9 +1259,133 @@ function setupPlayer() {
   updateModeDisplay();
 }
 
-// 全局 toast 函数
+function showImportResult(created, added, skipped) {
+  const resultCard = document.getElementById('import-result');
+  if (!resultCard) return;
+  resultCard.style.display = '';
+  var html = '';
+  html += '<div class="result-item">';
+  html += '<div class="result-icon success">✓</div>';
+  html += '<div class="result-text"><span class="result-num">' + created + '</span> 个新闻已创建</div>';
+  html += '</div>';
+  html += '<div class="result-item">';
+  html += '<div class="result-icon info">📋</div>';
+  html += '<div class="result-text"><span class="result-num">' + added + '</span> 个已添加到歌单';
+  if (skipped > 0) html += '，<span style="color:var(--news-on-surface-variant)">' + skipped + ' 个已跳过（重复）</span>';
+  html += '</div></div>';
+  resultCard.innerHTML = html;
+  resultCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+async function initImportUI() {
+  const playlistSelect = document.getElementById('playlist-select');
+  const btnNewPlaylist = document.getElementById('btn-new-playlist');
+  const btnBatchImport = document.getElementById('btn-batch-import');
+  const dialogOverlay = document.getElementById('newPlaylistModal');
+  const dialogCancel = document.getElementById('dialog-cancel');
+  const dialogConfirm = document.getElementById('dialog-confirm');
+  const newPlaylistName = document.getElementById('new-playlist-name');
+
+  if (playlistSelect) {
+    playlistSelect.addEventListener('change', function () {
+      targetPlaylistId = parseInt(playlistSelect.value);
+      if (P) {
+        P.apiPost('/api/settings', { last_playlist_id: targetPlaylistId }).catch(function () {});
+      }
+    });
+  }
+
+  if (btnNewPlaylist && dialogOverlay) {
+    btnNewPlaylist.addEventListener('click', function () {
+      if (newPlaylistName) newPlaylistName.value = '';
+      dialogOverlay.style.display = 'flex';
+      if (newPlaylistName) newPlaylistName.focus();
+    });
+  }
+
+  if (dialogCancel && dialogOverlay) {
+    dialogCancel.addEventListener('click', function () {
+      dialogOverlay.style.display = 'none';
+    });
+  }
+
+  if (dialogOverlay) {
+    dialogOverlay.addEventListener('click', function (e) {
+      if (e.target === dialogOverlay) dialogOverlay.style.display = 'none';
+    });
+  }
+
+  if (dialogConfirm && newPlaylistName && dialogOverlay) {
+    dialogConfirm.addEventListener('click', function () {
+      var name = newPlaylistName.value.trim();
+      if (!name) {
+        showSnack('请输入歌单名称', 'error');
+        return;
+      }
+      dialogConfirm.disabled = true;
+      createNewsPlaylist(name).then(function (data) {
+        dialogOverlay.style.display = 'none';
+        showSnack('歌单已创建');
+        playlists.push(data);
+        targetPlaylistId = data.id;
+        renderPlaylistSelect();
+      }).catch(function (err) {
+        showSnack(err.message || '创建失败', 'error');
+      }).finally(function () {
+        dialogConfirm.disabled = false;
+      });
+    });
+  }
+
+  if (newPlaylistName) {
+    newPlaylistName.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        const confirmBtn = document.getElementById('dialog-confirm');
+        if (confirmBtn) confirmBtn.click();
+      }
+    });
+  }
+
+  if (btnBatchImport) {
+    btnBatchImport.addEventListener('click', async function () {
+      const result = await api('/player/playable?limit=30');
+      if (result.code !== 0 || !result.data?.news || result.data.news.length === 0) {
+        showSnack('暂无可导入的新闻', 'info');
+        return;
+      }
+      const newsItems = result.data.news.filter(n => !!n.audioUrl);
+      if (newsItems.length === 0) {
+        showSnack('暂无带音频的新闻', 'info');
+        return;
+      }
+      btnBatchImport.disabled = true;
+      btnBatchImport.innerHTML = '<span>⏳ 导入中...</span>';
+      try {
+        await loadPlaylists();
+        const importResult = await importNewsToHost(newsItems);
+        showImportResult(importResult.created, importResult.added, importResult.skipped);
+      } catch (e) {
+        showSnack('批量导入失败: ' + (e && e.message ? e.message : String(e)), 'error');
+      } finally {
+        btnBatchImport.disabled = false;
+        btnBatchImport.innerHTML = '批量导入到歌单';
+      }
+    });
+  }
+}
+
 window.songloftToast = showToast;
 
-// 启动
-setupPlayer();
-loadHotboard();
+function init() {
+  setupPlayer();
+  loadPlaylists();
+  loadSettings();
+  initImportUI();
+  loadHotboard();
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}

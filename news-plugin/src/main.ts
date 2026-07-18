@@ -83,6 +83,31 @@ function setupRouter(): void {
   router.post('/api/search', hostSearchHandler);
   router.post('/api/music/url', hostMusicUrlHandler);
 
+  // 歌单列表（参考电台插件）
+  router.get('/api/playlists', async () => {
+    const playlists = await songloft.playlists.list();
+    const radioPlaylists = playlists.filter((p: any) => p.type === 'radio');
+    return jsonResponse({ playlists: radioPlaylists });
+  });
+
+  // 设置接口（参考电台插件）
+  router.get('/api/settings', async () => {
+    const lastPlaylistId = (await songloft.storage.get('last_playlist_id')) as number | null;
+    return jsonResponse({ last_playlist_id: lastPlaylistId ?? 2 });
+  });
+
+  router.post('/api/settings', async (req) => {
+    try {
+      const body = JSON.parse(req.body as unknown as string);
+      if (body.last_playlist_id !== undefined) {
+        await songloft.storage.set('last_playlist_id', body.last_playlist_id);
+      }
+    } catch {
+      return jsonResponse({ error: '请求体格式错误' }, 400);
+    }
+    return jsonResponse({ ok: true });
+  });
+
   // 聚合接口 - 多平台热榜聚合（去重 + 归一化排序，带 TTL 缓存）
   router.get('/api/aggregate/hotboard', async (req) => {
     try {
