@@ -668,6 +668,7 @@ async function api(path, options = {}) {
   try {
     return await fetchJson(path, options);
   } catch (e) {
+    console.error('[API] ' + path + ' error:', e);
     return { code: -1, msg: 'Network error: ' + (e && e.message ? e.message : String(e)) };
   }
 }
@@ -677,12 +678,34 @@ async function fetchJson(path, options) {
   if (options.body !== undefined && options.body !== null && !(options.body instanceof FormData)) {
     headers['Content-Type'] = headers['Content-Type'] || 'application/json';
   }
-  const resp = await fetch(API_BASE + path, { ...options, headers });
-  const text = await resp.text();
-  try {
-    return JSON.parse(text);
-  } catch (e) {
-    return { code: -1, msg: text || '响应解析失败' };
+  // 超时保护：默认 20s，避免 WebView 中 fetch 永不返回
+  // 注意：部分旧 WebView 不支持 AbortController，降级为无超时 fetch
+  const timeout = options.timeout || 20000;
+  const hasAbort = typeof AbortController !== 'undefined';
+
+  if (hasAbort) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout);
+    try {
+      const resp = await fetch(API_BASE + path, { ...options, headers, signal: controller.signal });
+      const text = await resp.text();
+      try {
+        return JSON.parse(text);
+      } catch (e) {
+        return { code: -1, msg: text || '响应解析失败' };
+      }
+    } finally {
+      clearTimeout(timer);
+    }
+  } else {
+    // 无 AbortController 支持，直接 fetch（不带超时）
+    const resp = await fetch(API_BASE + path, { ...options, headers });
+    const text = await resp.text();
+    try {
+      return JSON.parse(text);
+    } catch (e) {
+      return { code: -1, msg: text || '响应解析失败' };
+    }
   }
 }
 
@@ -1041,27 +1064,30 @@ function renderCategoryTabs(categories) {
 // 热榜
 async function loadHotboard() {
   const container = document.getElementById('hotboardList');
+  if (!container) return;
   const categoryTabs = document.getElementById('categoryTabs');
-  const aggregate = document.getElementById('aggregateMode').checked;
+  const aggregate = document.getElementById('aggregateMode') ? document.getElementById('aggregateMode').checked : true;
 
   container.innerHTML = '<div class="empty">加载中...</div>';
-  
+
   if (categoryTabs) {
     categoryTabs.style.display = aggregate ? 'flex' : 'none';
   }
 
   if (aggregate) {
-    const result = await api(`/aggregate/hotboard?limit=50&category=${encodeURIComponent(currentCategory)}`);
+    const result = await api(`/aggregate/hotboard?limit=50&category=${encodeURIComponent(currentCategory)}`, { timeout: 25000 });
     if (result.code !== 0) {
-      container.innerHTML = `<div class="empty">${result.msg || '加载失败'}</div>`;
+      console.warn('[hotboard] aggregate failed, falling back to single source:', result.msg);
+      // 聚合失败，回退到单源
+      await loadSingleHotboard(container);
       return;
     }
     const data = result.data || {};
     const news = data.news || [];
     aggregateCategories = data.categories || [];
-    
+
     renderCategoryTabs(aggregateCategories);
-    
+
     if (news.length === 0) {
       container.innerHTML = '<div class="empty">暂无数据</div>';
       return;
@@ -1069,19 +1095,26 @@ async function loadHotboard() {
     container.innerHTML = news.map((item, i) => renderNewsItem(item, i, true, true)).join('');
     attachNewsItemHandlers(container);
   } else {
-    const result = await api('/news/hotboard?source_id=baidu&limit=30');
-    if (result.code !== 0) {
-      container.innerHTML = `<div class="empty">${result.msg || '加载失败'}</div>`;
-      return;
-    }
-    const news = (result.data && result.data.news) || [];
-    if (news.length === 0) {
-      container.innerHTML = '<div class="empty">暂无数据</div>';
-      return;
-    }
-    container.innerHTML = news.map((item, i) => renderNewsItem(item, i)).join('');
-    attachNewsItemHandlers(container);
+    await loadSingleHotboard(container);
   }
+}
+
+async function loadSingleHotboard(container) {
+  // 按优先级尝试多个平台
+  const sources = ['baidu', 'weibo', 'zhihu', '36kr', 'toutiao'];
+  for (const sid of sources) {
+    try {
+      const result = await api(`/news/hotboard?source_id=${sid}&limit=30`, { timeout: 15000 });
+      if (result.code === 0 && result.data && result.data.news && result.data.news.length > 0) {
+        container.innerHTML = result.data.news.map((item, i) => renderNewsItem(item, i)).join('');
+        attachNewsItemHandlers(container);
+        return;
+      }
+    } catch (e) {
+      console.warn('[hotboard] source ' + sid + ' failed:', e);
+    }
+  }
+  container.innerHTML = '<div class="empty">所有热榜源加载失败，请检查网络</div>';
 }
 
 document.getElementById('aggregateMode').addEventListener('change', () => {
@@ -1554,11 +1587,19 @@ async function initImportUI() {
 window.songloftToast = showToast;
 
 function init() {
-  setupPlayer();
-  loadPlaylists();
-  loadSettings();
-  initImportUI();
-  loadHotboard();
+  try {
+    setupPlayer();
+  } catch (e) {
+    console.error('[init] setupPlayer failed:', e);
+  }
+  loadPlaylists().catch(e => console.error('[init] loadPlaylists failed:', e));
+  loadSettings().catch(e => console.error('[init] loadSettings failed:', e));
+  try {
+    initImportUI();
+  } catch (e) {
+    console.error('[init] initImportUI failed:', e);
+  }
+  loadHotboard().catch(e => console.error('[init] loadHotboard failed:', e));
 }
 
 if (document.readyState === 'loading') {
