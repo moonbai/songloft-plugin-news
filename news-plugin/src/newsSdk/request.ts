@@ -21,72 +21,65 @@ function httpFetch(url: string, options: {
   timeout?: number;
   json?: boolean;
 } = {}): Promise<HttpResponse> {
-  return new Promise((resolve, reject) => {
-    const method = (options.method || 'GET').toUpperCase();
-    const headers: Record<string, string> = { ...DEFAULT_HEADERS, ...(options.headers || {}) };
-    const body = options.body as BodyInit | undefined;
-    const timeout = options.timeout || 15000;
+  const method = (options.method || 'GET').toUpperCase();
+  const headers: Record<string, string> = { ...DEFAULT_HEADERS, ...(options.headers || {}) };
+  const body = options.body as BodyInit | undefined;
+  const timeout = options.timeout || 15000;
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => {
-      controller.abort();
-      reject(new Error('Request timeout'));
-    }, timeout) as unknown as number;
-
-    fetch(url, { method, headers, body, signal: controller.signal }).then(async (resp) => {
-      clearTimeout(timer);
-
-      const respHeaders: Record<string, string> = {};
-      try {
-        const hdr = resp.headers as any;
-        if (typeof hdr.forEach === 'function') {
-          hdr.forEach((value: string, key: string) => {
-            respHeaders[key.toLowerCase()] = value;
-          });
-        } else if (typeof hdr.entries === 'function') {
-          for (const [key, value] of hdr.entries()) {
-            respHeaders[key.toLowerCase()] = value;
-          }
+  const fetchPromise = fetch(url, { method, headers, body }).then(async (resp) => {
+    const respHeaders: Record<string, string> = {};
+    try {
+      const hdr = resp.headers as any;
+      if (typeof hdr.forEach === 'function') {
+        hdr.forEach((value: string, key: string) => {
+          respHeaders[key.toLowerCase()] = value;
+        });
+      } else if (typeof hdr.entries === 'function') {
+        for (const [key, value] of hdr.entries()) {
+          respHeaders[key.toLowerCase()] = value;
         }
-      } catch {
-        // ignore header parse errors
       }
+    } catch {
+      // ignore header parse errors
+    }
 
-      const text = await resp.text();
-      let bodyData: any = text;
+    const text = await resp.text();
+    let bodyData: any = text;
 
-      if (text) {
-        const ct = respHeaders['content-type'] || '';
-        const isJson = ct.includes('application/json') || ct.includes('text/json') || options.json;
-        if (isJson) {
+    if (text) {
+      const ct = respHeaders['content-type'] || '';
+      const isJson = ct.includes('application/json') || ct.includes('text/json') || options.json;
+      if (isJson) {
+        try {
+          bodyData = JSON.parse(text);
+        } catch {
+          bodyData = text;
+        }
+      } else {
+        const trimmed = text.trim();
+        if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
           try {
-            bodyData = JSON.parse(text);
+            bodyData = JSON.parse(trimmed);
           } catch {
             bodyData = text;
           }
-        } else {
-          const trimmed = text.trim();
-          if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-            try {
-              bodyData = JSON.parse(trimmed);
-            } catch {
-              bodyData = text;
-            }
-          }
         }
       }
+    }
 
-      resolve({
-        statusCode: resp.status,
-        headers: respHeaders,
-        body: bodyData,
-        raw: text,
-      });
-    }).catch((err) => {
-      clearTimeout(timer);
-      reject(err);
-    });
+    return {
+      statusCode: resp.status,
+      headers: respHeaders,
+      body: bodyData,
+      raw: text,
+    };
   });
+
+  const timeoutPromise = new Promise<HttpResponse>((_, reject) => {
+    setTimeout(() => reject(new Error('Request timeout')), timeout);
+  });
+
+  return Promise.race([fetchPromise, timeoutPromise]);
 }
 
 export default httpFetch;
