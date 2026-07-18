@@ -65,7 +65,7 @@ class NewsPlayer {
   
   async _loadTtsConfig() {
     try {
-      const result = await fetch('./api/player/tts-config').then(r => r.json());
+      const result = await api('/player/tts-config');
       if (result.code === 0 && result.data) {
         this.ttsConfig = { ...this.ttsConfig, ...result.data };
       }
@@ -73,12 +73,42 @@ class NewsPlayer {
       // 忽略
     }
   }
+
+  /**
+   * 检测浏览器 TTS 能力
+   * - 必须支持 SpeechSynthesis API
+   * - 必须有可用语音（部分 WebView/桌面端有 API 但无语音）
+   * - voices 可能异步加载，最多等 1.5s
+   */
+  _ttsAvailable() {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return false;
+    if (typeof SpeechSynthesisUtterance === 'undefined') return false;
+    const voices = window.speechSynthesis.getVoices();
+    return voices.length > 0;
+  }
+
+  _waitForVoices(timeoutMs = 1500) {
+    return new Promise((resolve) => {
+      if (this._ttsAvailable()) return resolve(true);
+      let done = false;
+      const finish = (ok) => { if (!done) { done = true; resolve(ok); } };
+      const timer = setTimeout(() => finish(this._ttsAvailable()), timeoutMs);
+      try {
+        window.speechSynthesis.onvoiceschanged = () => {
+          clearTimeout(timer);
+          finish(this._ttsAvailable());
+        };
+      } catch (e) {
+        clearTimeout(timer);
+        finish(false);
+      }
+    });
+  }
   
   async _saveTtsConfig() {
     try {
-      await fetch('./api/player/tts-config', {
+      await api('/player/tts-config', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(this.ttsConfig),
       });
     } catch (e) {
@@ -123,17 +153,30 @@ class NewsPlayer {
       this._stop();
       return;
     }
-    
+
     this._stop();
     this.currentItem = this.queue[this.currentIndex];
     this._emit('itemchange', { item: this.currentItem, index: this.currentIndex });
-    
+
+    const hasAudio = !!this.currentItem.audioUrl;
+    const ttsEnabled = this.ttsConfig.enableTts && this.ttsMode !== 'audio';
+
     // 决定播放方式
-    if (this.currentItem.audioUrl && this.ttsMode !== 'tts') {
+    if (hasAudio && this.ttsMode !== 'tts') {
       // 优先使用音频
       await this._playAudio(this.currentItem.audioUrl);
-    } else if (this.ttsConfig.enableTts && this.ttsMode !== 'audio') {
-      // 使用 TTS
+    } else if (ttsEnabled) {
+      // 使用 TTS（需先确认浏览器支持 + 有可用语音）
+      const ok = await this._waitForVoices();
+      if (!ok) {
+        if (hasAudio) {
+          songloftToast && songloftToast('浏览器不支持 TTS，已切换音频播放', 'info');
+          await this._playAudio(this.currentItem.audioUrl);
+        } else {
+          songloftToast && songloftToast('当前浏览器不支持 TTS 朗读，请查看正文', 'info');
+        }
+        return;
+      }
       await this._playTts(this.currentItem);
     } else {
       songloftToast && songloftToast('该新闻暂不支持播放', 'info');
@@ -152,32 +195,35 @@ class NewsPlayer {
   }
   
   async _playTts(news) {
-    if (!('speechSynthesis' in window)) {
-      songloftToast && songloftToast('当前浏览器不支持 TTS', 'error');
+    if (!this._ttsAvailable()) {
+      songloftToast && songloftToast('当前浏览器不支持 TTS 朗读', 'error');
       return;
     }
-    
+
     try {
-      // 先获取 TTS 脚本（含 content）
-      const result = await fetch('./api/player/resolve', {
+      // 获取 TTS 脚本（含 content）
+      const result = await api('/player/resolve', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ news, enableTts: true }),
-      }).then(r => r.json());
-      
+      });
+
       if (result.code !== 0) {
         songloftToast && songloftToast('加载失败', 'error');
         return;
       }
-      
+
       const data = result.data;
       const ttsScript = data.ttsScript || [];
+      if (!ttsScript || ttsScript.length === 0) {
+        songloftToast && songloftToast('该新闻无朗读内容', 'info');
+        return;
+      }
       this.isPlaying = true;
       this._emit('play', { item: this.currentItem, mode: 'tts' });
-      
+
       await this._speakSegments(ttsScript);
     } catch (e) {
-      songloftToast && songloftToast('TTS 失败: ' + e.message, 'error');
+      songloftToast && songloftToast('TTS 失败: ' + (e && e.message ? e.message : String(e)), 'error');
     }
   }
   
@@ -436,8 +482,19 @@ function formatHot(n) {
 
 function renderPlayActions(item) {
   const hasAudio = !!item.audioUrl;
-  const supportsTts = item.ttsEnabled !== false;
-  
+  // 朗读按钮仅在浏览器支持 TTS 且该条目允许 TTS 时显示
+  const ttsCapable = player && player._ttsAvailable();
+  const supportsTts = ttsCapable && item.ttsEnabled !== false;
+
+  // 无音频且无 TTS 时不渲染整个按钮组（仅显示"查看正文"由列表点击触发）
+  if (!hasAudio && !supportsTts) {
+    return `
+      <div class="play-actions" data-id="${escapeHtml(item.id)}" data-source="${escapeHtml(item.source)}">
+        <button class="play-btn add" data-action="add-playlist">+ 播放列表</button>
+      </div>
+    `;
+  }
+
   return `
     <div class="play-actions" data-id="${escapeHtml(item.id)}" data-source="${escapeHtml(item.source)}">
       ${hasAudio ? `<button class="play-btn" data-action="play-audio" data-url="${escapeHtml(item.audioUrl)}">▶ 播放音频</button>` : ''}
