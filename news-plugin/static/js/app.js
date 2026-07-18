@@ -1,6 +1,6 @@
 // Edge TTS 客户端 - 通过后端接口获取 TTS 音频
-// 不在浏览器中直接 WebSocket 连接，而是调用后端 /api/player/tts-stream
-// 后端在 QuickJS 环境中通过 WebSocket 连接微软 Edge TTS 服务
+// 后端调用在线 TTS 服务生成 MP3，base64 编码后返回 string body
+// 前端解码 base64 为 Blob URL 播放（宿主 HTTPResponse.body 只接受 string）
 class EdgeTTSClient {
   async synthesize(text, config) {
     const params = new URLSearchParams();
@@ -14,7 +14,23 @@ class EdgeTTSClient {
       const errText = await resp.text().catch(() => '');
       throw new Error('TTS 接口返回 ' + resp.status + ': ' + errText);
     }
-    const blob = await resp.blob();
+
+    // 后端返回 base64 编码的音频数据（text/plain）
+    const base64Text = await resp.text();
+    if (!base64Text) {
+      throw new Error('TTS 返回空数据');
+    }
+
+    // base64 解码为 Uint8Array
+    const binaryString = atob(base64Text);
+    const len = binaryString.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+
+    // 创建 Blob URL
+    const blob = new Blob([bytes], { type: 'audio/mpeg' });
     return URL.createObjectURL(blob);
   }
 }

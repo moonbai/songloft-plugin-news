@@ -13,6 +13,21 @@ import type { PlaylistItem, TtsConfig } from '../player';
 import type { NewsItem } from '../types';
 
 /**
+ * Uint8Array 转 base64 字符串
+ * 宿主 HTTPResponse.body 只接受 string，二进制数据需 base64 编码后返回
+ */
+function uint8ToBase64(arr: Uint8Array): string {
+  let binary = '';
+  const chunkSize = 8192;
+  for (let i = 0; i < arr.length; i += chunkSize) {
+    const chunk = arr.subarray(i, i + chunkSize);
+    // String.fromCharCode 一次处理太多参数会栈溢出，分块处理
+    binary += String.fromCharCode.apply(null, Array.from(chunk));
+  }
+  return btoa(binary);
+}
+
+/**
  * 把 NewsItem 转成官方 songs.create 的入参
  * - 原生音频：url 填 audioUrl
  * - TTS 新闻：url 填插件内的 TTS 音频流接口，宿主播放时实时生成音频
@@ -398,7 +413,10 @@ export function createPlayerHandlers() {
 
     /**
      * TTS 音频流接口 - 供宿主原生播放器调用
-     * 通过在线 TTS 服务（Google/有道）实时生成 MP3 音频并返回
+     * 通过在线 TTS 服务（百度翻译）实时生成 MP3 音频并返回
+     *
+     * 注意：宿主 HTTPResponse.body 只接受 string 类型，
+     * 因此音频数据 base64 编码后作为 string 返回，前端解码为 Blob 播放。
      */
     async ttsStream(req: HTTPRequest) {
       try {
@@ -431,15 +449,18 @@ export function createPlayerHandlers() {
 
         songloft.log.info('ttsStream: audio generated, size=' + audioBuffer.length);
 
+        // base64 编码（宿主 body 只接受 string）
+        const base64Audio = uint8ToBase64(audioBuffer);
+
         return {
           statusCode: 200,
           headers: {
-            'Content-Type': 'audio/mpeg',
-            'Content-Length': String(audioBuffer.length),
+            'Content-Type': 'text/plain; charset=utf-8',
+            'X-Audio-Base64': '1',
+            'X-Audio-Size': String(audioBuffer.length),
             'Cache-Control': 'public, max-age=86400',
-            'Accept-Ranges': 'bytes',
           },
-          body: audioBuffer,
+          body: base64Audio,
         };
       } catch (e) {
         songloft.log.error('ttsStream error: ' + (e as Error).message);
