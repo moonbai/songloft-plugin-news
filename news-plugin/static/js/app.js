@@ -422,6 +422,8 @@ let player = null;
 let currentTab = 'hotboard';
 let playlists = [];
 let targetPlaylistId = 2;
+let currentCategory = 'all';
+let aggregateCategories = [];
 
 const P = (typeof window !== 'undefined' && window.SongloftPlugin) ? window.SongloftPlugin : null;
 
@@ -607,15 +609,27 @@ function renderPlayActions(item) {
   `;
 }
 
-function renderNewsItem(item, index, showPlayActions = true) {
+function renderNewsItem(item, index, showPlayActions = true, isAggregate = false) {
   const rankClass = index !== undefined && index < 3 ? `top${index + 1}` : '';
+  const topCardClass = index !== undefined && index < 3 ? `top${index + 1}-card` : '';
   const rankHtml = index !== undefined ? `<span class="hot-rank ${rankClass}">${index + 1}</span>` : '';
-  const hotHtml = item.hot ? `<span class="news-hot">🔥 ${formatHot(item.hot)}</span>` : '';
+  const hotValue = item.combinedHot || item.hotLevel || item.hot || 0;
+  const hotHtml = hotValue ? `<span class="news-hot">🔥 ${formatHot(Math.round(hotValue))}</span>` : '';
   const audioBadge = item.audioUrl ? `<span class="audio-badge">🎧 音频</span>` : '';
   const durationHtml = item.audioDuration ? `<span class="duration">⏱ ${formatDuration(item.audioDuration)}</span>` : '';
   
+  const hotPercent = Math.min(100, Math.max(0, hotValue ? (hotValue / 100) * 100 : 0));
+  const hotBarHtml = isAggregate && hotValue ? `<div class="hot-bar"><div class="hot-bar-fill" style="width:${hotPercent}%"></div></div>` : '';
+  
+  let sourceTagsHtml = '';
+  if (isAggregate && item.sourceNames && item.sourceNames.length > 1) {
+    sourceTagsHtml = `<div class="source-tags"><span class="multi-source-badge">📰 ${item.sourceNames.length}个来源</span>${item.sourceNames.slice(0, 3).map(s => `<span class="source-tag">${escapeHtml(s)}</span>`).join('')}</div>`;
+  } else if (isAggregate && item.sourceNames && item.sourceNames.length === 1) {
+    sourceTagsHtml = `<div class="source-tags"><span class="source-tag">${escapeHtml(item.sourceNames[0])}</span></div>`;
+  }
+
   return `
-    <div class="news-item" data-id="${escapeHtml(item.id)}" data-source="${escapeHtml(item.source)}" data-url="${escapeHtml(item.url || '')}">
+    <div class="news-item ${topCardClass}" data-id="${escapeHtml(item.id)}" data-source="${escapeHtml(item.source)}" data-url="${escapeHtml(item.url || '')}">
       <div class="news-meta">
         ${rankHtml}
         <span class="news-source">${escapeHtml(item.sourceName || item.source)}</span>
@@ -626,6 +640,8 @@ function renderNewsItem(item, index, showPlayActions = true) {
       </div>
       <div class="news-title">${escapeHtml(item.title)}</div>
       ${item.summary ? `<div class="news-summary">${escapeHtml(item.summary)}</div>` : ''}
+      ${sourceTagsHtml}
+      ${hotBarHtml}
       ${showPlayActions ? renderPlayActions(item) : ''}
     </div>
   `;
@@ -772,26 +788,53 @@ document.getElementById('detailModal').addEventListener('click', (e) => {
   }
 });
 
+function renderCategoryTabs(categories) {
+  const container = document.getElementById('categoryTabs');
+  if (!container) return;
+  container.innerHTML = categories.map(cat => `
+    <div class="category-tab ${cat.id === currentCategory ? 'active' : ''}" data-category="${escapeHtml(cat.id)}">
+      ${escapeHtml(cat.name)}
+    </div>
+  `).join('');
+  
+  container.querySelectorAll('.category-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      currentCategory = tab.dataset.category;
+      renderCategoryTabs(aggregateCategories);
+      loadHotboard();
+    });
+  });
+}
+
 // 热榜
 async function loadHotboard() {
   const container = document.getElementById('hotboardList');
+  const categoryTabs = document.getElementById('categoryTabs');
   const aggregate = document.getElementById('aggregateMode').checked;
 
   container.innerHTML = '<div class="empty">加载中...</div>';
+  
+  if (categoryTabs) {
+    categoryTabs.style.display = aggregate ? 'flex' : 'none';
+  }
 
   if (aggregate) {
-    const result = await api('/aggregate/hotboard?limit=50');
+    const result = await api(`/aggregate/hotboard?limit=50&category=${encodeURIComponent(currentCategory)}`);
     if (result.code !== 0) {
       container.innerHTML = `<div class="empty">${result.msg || '加载失败'}</div>`;
       return;
     }
-    // 新格式：{ news: [...], bySource: [...] }
-    const news = (result.data && result.data.news) || [];
+    const data = result.data || {};
+    const news = data.news || [];
+    aggregateCategories = data.categories || [];
+    
+    renderCategoryTabs(aggregateCategories);
+    
     if (news.length === 0) {
       container.innerHTML = '<div class="empty">暂无数据</div>';
       return;
     }
-    container.innerHTML = news.map((item, i) => renderNewsItem(item, i)).join('');
+    container.innerHTML = news.map((item, i) => renderNewsItem(item, i, true, true)).join('');
     attachNewsItemHandlers(container);
   } else {
     const result = await api('/news/hotboard?source_id=baidu&limit=30');
@@ -809,7 +852,10 @@ async function loadHotboard() {
   }
 }
 
-document.getElementById('aggregateMode').addEventListener('change', loadHotboard);
+document.getElementById('aggregateMode').addEventListener('change', () => {
+  currentCategory = 'all';
+  loadHotboard();
+});
 
 // 新闻面板
 async function loadNewsPanel() {

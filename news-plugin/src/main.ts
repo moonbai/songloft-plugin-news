@@ -25,6 +25,10 @@ const SOURCE_NAMES: Record<string, string> = {
   pengpai: '澎湃',
   ximalaya: '喜马拉雅',
   dedao: '得到',
+  ithome: 'IT之家',
+  huxiu: '虎嗅',
+  sspai: '少数派',
+  juejin: '掘金',
 };
 
 /**
@@ -110,8 +114,9 @@ function setupRouter(): void {
   router.get('/api/aggregate/hotboard', async (req) => {
     try {
       const query = parseQuery(req.query);
-      const limit = Number(query.limit) || 10;
-      const data = await getAggregatedHotboard(limit, normalizeTitle, SOURCE_NAMES);
+      const limit = Number(query.limit) || 50;
+      const category = String(query.category || 'all');
+      const data = await getAggregatedHotboard(limit, normalizeTitle, SOURCE_NAMES, category);
       return jsonResponse({ code: 0, msg: 'success', data });
     } catch (e) {
       songloft.log.error('aggregate/hotboard error: ' + (e as Error).message);

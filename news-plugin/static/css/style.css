@@ -113,6 +113,84 @@ input:checked + .slider:before { transform: translateX(18px); }
 .hot-rank.top2 { background: var(--news-warning); color: var(--news-on-primary); }
 .hot-rank.top3 { background: var(--news-success); color: var(--news-on-primary); }
 
+.category-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  flex-wrap: wrap;
+}
+.category-tab {
+  padding: 6px 14px;
+  border-radius: 16px;
+  font-size: 13px;
+  cursor: pointer;
+  background: var(--news-surface-variant);
+  color: var(--news-on-surface-variant);
+  border: 1px solid var(--news-outline-variant);
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+.category-tab:hover {
+  background: var(--news-outline-variant);
+}
+.category-tab.active {
+  background: var(--news-primary);
+  color: var(--news-on-primary);
+  border-color: var(--news-primary);
+}
+
+.news-item .hot-bar {
+  height: 4px;
+  background: var(--news-surface-variant);
+  border-radius: 2px;
+  margin-top: 8px;
+  overflow: hidden;
+}
+.news-item .hot-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--news-warning), var(--news-error));
+  border-radius: 2px;
+  transition: width 0.3s;
+}
+.news-item .source-tags {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+.news-item .source-tag {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--news-surface-variant);
+  color: var(--news-on-surface-variant);
+}
+.news-item.top1-card {
+  border-color: var(--news-error);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--news-error) 8%, var(--news-surface-container)), var(--news-surface-container));
+}
+.news-item.top2-card {
+  border-color: var(--news-warning);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--news-warning) 8%, var(--news-surface-container)), var(--news-surface-container));
+}
+.news-item.top3-card {
+  border-color: var(--news-success);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--news-success) 8%, var(--news-surface-container)), var(--news-surface-container));
+}
+.news-item .multi-source-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: color-mix(in srgb, var(--news-primary) 15%, transparent);
+  color: var(--news-primary);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 500;
+}
+
 /* 播放相关 */
 .news-item .play-actions { display: flex; gap: 6px; margin-top: 10px; }
 .news-item .play-btn {
