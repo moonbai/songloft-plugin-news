@@ -46,12 +46,21 @@ export function buildTtsScript(news: NewsItem, content?: string): TtsSegment[] {
   segments.push({ id: 'pause1', type: 'pause', text: '', durationMs: 500 });
   
   if (news.summary) {
-    segments.push({
-      id: 'summary',
-      type: 'content',
-      text: news.summary,
-    });
-    segments.push({ id: 'pause2', type: 'pause', text: '', durationMs: 300 });
+    // 清洗 summary 中的 HTML
+    const cleanSummary = news.summary
+      .replace(/<[^>]+>/g, '')
+      .replace(/&[a-z]+;/gi, ' ')
+      .replace(/https?:\/\/[^\s]+/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (cleanSummary) {
+      segments.push({
+        id: 'summary',
+        type: 'content',
+        text: cleanSummary,
+      });
+      segments.push({ id: 'pause2', type: 'pause', text: '', durationMs: 300 });
+    }
   }
   
   if (content) {

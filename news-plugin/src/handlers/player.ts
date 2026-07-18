@@ -15,8 +15,8 @@ import type { NewsItem } from '../types';
  * 把 NewsItem 转成官方 songs.create 的入参
  * 支持原生音频和TTS两种模式：
  * - 原生音频：url 填 audioUrl
- * - TTS模式：url 留空（或占位），sourceData 中标记 isTts + ttsText
- *   宿主播放时会回调 /api/music/url，从 sourceData 解析出TTS文本生成URL
+ * - TTS模式：url 直接填有道TTS URL（标题+摘要，限200字避免URL过长）
+ *   同时在 sourceData 中存完整信息，供 music/url 回调使用
  */
 function newsToSongInput(news: NewsItem): CreateSongInput | null {
   if (!news || !news.title) return null;
@@ -27,9 +27,24 @@ function newsToSongInput(news: NewsItem): CreateSongInput | null {
   ).slice(0, 16);
 
   const isTts = !news.audioUrl;
-  const ttsText = news.title + '。' + (news.summary || '');
+
+  // 清洗 TTS 文本
+  const rawText = news.title + '。' + (news.summary || '');
+  const ttsText = rawText
+    .replace(/<[^>]+>/g, '')
+    .replace(/&[a-z]+;/gi, ' ')
+    .replace(/https?:\/\/[^\s<]+/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 200);
+
   // 估算时长：中文约240字/分钟
   const estimatedDuration = isTts ? Math.ceil(ttsText.length / 240 * 60) : (news.audioDuration || 0);
+
+  // TTS 模式：直接生成有道 URL，宿主可直接播放
+  const url = isTts
+    ? 'https://dict.youdao.com/dictvoice?audio=' + encodeURIComponent(ttsText) + '&type=1'
+    : (news.audioUrl || '');
 
   const sourceData = JSON.stringify({
     newsId,
@@ -40,8 +55,7 @@ function newsToSongInput(news: NewsItem): CreateSongInput | null {
   });
 
   return {
-    // TTS模式url留空，宿主通过music/url回调获取真实播放地址
-    url: news.audioUrl || '',
+    url,
     title: news.title,
     artist: news.sourceName || news.author || news.source,
     album: '新闻资讯',
@@ -329,18 +343,23 @@ export function createPlayerHandlers() {
         const songIds = songs.map(s => s.id);
 
         let added = 0;
+        let addError = '';
         if (playlistId && songIds.length > 0) {
           try {
             const result = await songloft.playlists.addSongs(playlistId, songIds);
             added = result.added;
           } catch (e) {
-            songloft.log.error('add to playlist failed: ' + (e as Error).message);
+            addError = (e as Error).message;
+            songloft.log.error('add to playlist failed: ' + addError);
           }
+        } else if (!playlistId) {
+          addError = '未指定目标歌单';
         }
 
         return successResponse({
           created: songs.length,
           added,
+          addError,
           songs,
           skippedCount: skipped.length,
           skippedItems: skipped,

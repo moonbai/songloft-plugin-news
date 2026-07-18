@@ -232,8 +232,8 @@ class NewsPlayer {
       const fullText = textSegments.join(' ');
       if (!fullText.trim()) return false;
 
-      // 按句子分段（每段不超过400字符，有道TTS支持更长文本）
-      const chunks = this._splitTextForTts(fullText, 400);
+      // 按句子分段（每段不超过200字符，避免URL过长）
+      const chunks = this._splitTextForTts(fullText, 200);
       if (chunks.length === 0) return false;
 
       for (const chunk of chunks) {
@@ -276,35 +276,45 @@ class NewsPlayer {
   }
 
   /**
-   * 播放单段TTS音频（通过后端获取百度TTS音频URL，audio标签直接加载）
+   * 清洗TTS文本：去除HTML标签、实体、URL等
+   */
+  _cleanTtsText(text) {
+    return (text || '')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&[a-z]+;/gi, ' ')
+      .replace(/https?:\/\/[^\s<]+/gi, '')
+      .replace(/[a-zA-Z0-9_\-]+\.jpg|\.png|\.gif/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  /**
+   * 播放单段TTS音频（直接构建有道TTS URL，audio标签直接加载）
    */
   async _playTtsChunk(text) {
-    try {
-      const result = await api('/player/tts-audio?text=' + encodeURIComponent(text));
-      if (!result || result.code !== 0 || !result.url) {
-        return; // 跳过此段
-      }
+    const cleanText = this._cleanTtsText(text).slice(0, 200);
+    if (!cleanText) return;
 
-      return new Promise((resolve) => {
-        this.audio.src = result.url;
-        this.audio.playbackRate = this.ttsConfig.rate || 1.0;
-        this.audio.volume = this.ttsConfig.volume || 1.0;
+    const ttsUrl = 'https://dict.youdao.com/dictvoice?audio=' +
+      encodeURIComponent(cleanText) + '&type=1';
 
-        const cleanup = () => {
-          this.audio.removeEventListener('ended', onEnd);
-          this.audio.removeEventListener('error', onErr);
-        };
-        const onEnd = () => { cleanup(); resolve(); };
-        const onErr = () => { cleanup(); resolve(); };
+    return new Promise((resolve) => {
+      this.audio.src = ttsUrl;
+      this.audio.playbackRate = this.ttsConfig.rate || 1.0;
+      this.audio.volume = this.ttsConfig.volume || 1.0;
 
-        this.audio.addEventListener('ended', onEnd);
-        this.audio.addEventListener('error', onErr);
+      const cleanup = () => {
+        this.audio.removeEventListener('ended', onEnd);
+        this.audio.removeEventListener('error', onErr);
+      };
+      const onEnd = () => { cleanup(); resolve(); };
+      const onErr = () => { cleanup(); resolve(); };
 
-        this.audio.play().catch(() => { cleanup(); resolve(); });
-      });
-    } catch (e) {
-      console.warn('TTS chunk failed:', e);
-    }
+      this.audio.addEventListener('ended', onEnd);
+      this.audio.addEventListener('error', onErr);
+
+      this.audio.play().catch(() => { cleanup(); resolve(); });
+    });
   }
   
   _speakSegments(segments) {
@@ -624,10 +634,12 @@ async function importNewsToHost(newsItems) {
   }
 
   const data = result.data || result;
+  const addError = data.addError || '';
   return {
     created: data.created || 0,
     added: data.added || 0,
     skipped: data.skippedCount || 0,
+    addError,
   };
 }
 
@@ -790,7 +802,11 @@ function attachNewsItemHandlers(container) {
           try {
             await loadPlaylists();
             const result = await importNewsToHost([playItem]);
-            showSnack(`${result.created} 个已创建，${result.added} 个已加入歌单${result.skipped > 0 ? `，${result.skipped} 个已跳过` : ''}`, 'success');
+            if (result.addError) {
+              showSnack(`${result.created} 个已创建，但加入歌单失败: ${result.addError}`, 'error');
+            } else {
+              showSnack(`${result.created} 个已创建，${result.added} 个已加入歌单${result.skipped > 0 ? `，${result.skipped} 个已跳过` : ''}`, 'success');
+            }
             btn.textContent = '✓ 已加入歌单';
             btn.classList.add('added');
           } catch (e) {

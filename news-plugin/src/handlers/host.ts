@@ -25,6 +25,7 @@ interface NewsSourceData {
   source: string;
   newsId: string;
   audioUrl?: string;
+  ttsUrl?: string;
   title: string;
   artist?: string;
   coverUrl?: string;
@@ -54,9 +55,22 @@ async function loadPlayableNews(sourceId: string, limit: number): Promise<NewsIt
 
 function newsToSearchResult(n: NewsItem): SearchResultItem {
   const isTts = !n.audioUrl;
-  const ttsText = n.title + '。' + (n.summary || '');
+  // 清洗 TTS 文本
+  const rawText = n.title + '。' + (n.summary || '');
+  const ttsText = rawText
+    .replace(/<[^>]+>/g, '')
+    .replace(/&[a-z]+;/gi, ' ')
+    .replace(/https?:\/\/[^\s<]+/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 200);
   // 估算时长：中文约240字/分钟
   const estimatedDuration = isTts ? Math.ceil(ttsText.length / 240 * 60) : (n.audioDuration || 0);
+
+  // TTS 模式直接生成有道 URL
+  const ttsUrl = isTts
+    ? 'https://dict.youdao.com/dictvoice?audio=' + encodeURIComponent(ttsText) + '&type=1'
+    : undefined;
 
   return {
     title: n.title,
@@ -68,6 +82,7 @@ function newsToSearchResult(n: NewsItem): SearchResultItem {
       source: n.source,
       newsId: n.id,
       audioUrl: n.audioUrl,
+      ttsUrl,
       title: n.title,
       artist: n.sourceName || n.author || n.source,
       coverUrl: n.cover,
@@ -130,14 +145,17 @@ export const hostMusicUrlHandler = createMusicUrlHandler({
       };
     }
 
-    // TTS 新闻：生成有道TTS音频URL
-    if (sd.isTts && sd.ttsText) {
-      const text = sd.ttsText.slice(0, 400);
-      const ttsUrl = 'https://dict.youdao.com/dictvoice?audio=' +
-        encodeURIComponent(text) + '&type=1';
-      return {
-        url: ttsUrl,
-      };
+    // TTS 新闻：优先用预生成的 ttsUrl，否则现场生成
+    if (sd.isTts) {
+      if (sd.ttsUrl) {
+        return { url: sd.ttsUrl };
+      }
+      if (sd.ttsText) {
+        const text = sd.ttsText.slice(0, 200);
+        const ttsUrl = 'https://dict.youdao.com/dictvoice?audio=' +
+          encodeURIComponent(text) + '&type=1';
+        return { url: ttsUrl };
+      }
     }
 
     // 没有音频也不是TTS的，返回错误
