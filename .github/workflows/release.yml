@@ -86,7 +86,7 @@ jobs:
       - name: 更新版本号和在线更新地址
         run: |
           cd ${{ matrix.plugin }}
-          REPO_URL="https://github.com/moonbai/songloft-plugins"
+          REPO_URL="https://github.com/moonbai/songloft-plugin-news"
           VERSION="${{ needs.discover.outputs.version }}"
           PLUGIN_ENTRY=$(node -e "console.log(JSON.parse(require('fs').readFileSync('plugin.json','utf8')).entryPath||'plugin')")
           node -e "
@@ -191,7 +191,7 @@ jobs:
         id: notes
         run: |
           echo "body<<EOF" >> $GITHUB_OUTPUT
-          echo "## Songloft Plugins v${{ needs.discover.outputs.version }}" >> $GITHUB_OUTPUT
+          echo "## Songloft News Plugin v${{ needs.discover.outputs.version }}" >> $GITHUB_OUTPUT
           echo "" >> $GITHUB_OUTPUT
           echo "### 安装方式" >> $GITHUB_OUTPUT
           echo "" >> $GITHUB_OUTPUT
@@ -246,7 +246,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ needs.discover.outputs.version }}
-          name: Songloft Plugins v${{ needs.discover.outputs.version }}
+          name: Songloft News Plugin v${{ needs.discover.outputs.version }}
           files: release-assets/*.jsplugin.zip
           body: ${{ steps.notes.outputs.body }}
         env:
