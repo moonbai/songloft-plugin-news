@@ -217,7 +217,7 @@ jobs:
               fi
             done
             [ -z "$ZIP_FILE" ] && ZIP_FILE=$(ls release-assets/*.jsplugin.zip 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "")
-            echo "| $PLUGIN_NAME | \`$ENTRY_HASH\` | \`$ZIP_HASH\` | [$ZIP_FILE](https://github.com/moonbai/songloft-plugins/releases/download/v${{ needs.discover.outputs.version }}/$ZIP_FILE) |" >> $GITHUB_OUTPUT
+            echo "| $PLUGIN_NAME | \`$ENTRY_HASH\` | \`$ZIP_HASH\` | [$ZIP_FILE](https://github.com/moonbai/songloft-plugin-news/releases/download/v${{ needs.discover.outputs.version }}/$ZIP_FILE) |" >> $GITHUB_OUTPUT
           done
           echo "" >> $GITHUB_OUTPUT
           echo "---" >> $GITHUB_OUTPUT

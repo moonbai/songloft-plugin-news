@@ -120,12 +120,30 @@ function setupRouter(): void {
         }
       }
 
+      // 平台 ID 到名称的映射
+      const sourceNames: Record<string, string> = {
+        baidu: '百度',
+        weibo: '微博',
+        zhihu: '知乎',
+        wangyi: '网易',
+        toutiao: '头条',
+        '36kr': '36氪',
+        pengpai: '澎湃',
+        ximalaya: '喜马拉雅',
+        dedao: '得到',
+      };
+
       // 转数组，计算综合热度：hotLevel * (1 + 0.15 * (hotCount-1))
       // 多平台同时上榜说明热度高，给予加成
       const merged = Array.from(dedupMap.values()).map((item: any) => {
         const multiSourceBonus = 1 + 0.15 * (item.hotCount - 1);
+        // 生成来源显示名称
+        const names = (item.sources || [item.source]).map((s: string) => sourceNames[s] || s);
         return {
           ...item,
+          source: item.sources ? item.sources[0] : item.source, // 主来源
+          sourceName: names.join('/'), // 显示所有来源
+          sourceNames: names, // 原始数组供前端使用
           combinedHot: Math.round(item.hotLevel * multiSourceBonus),
         };
       });

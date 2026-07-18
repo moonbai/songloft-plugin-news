@@ -592,30 +592,23 @@ document.getElementById('detailModal').addEventListener('click', (e) => {
 async function loadHotboard() {
   const container = document.getElementById('hotboardList');
   const aggregate = document.getElementById('aggregateMode').checked;
-  
+
   container.innerHTML = '<div class="empty">加载中...</div>';
-  
+
   if (aggregate) {
-    const result = await api('/aggregate/hotboard?limit=10');
+    const result = await api('/aggregate/hotboard?limit=50');
     if (result.code !== 0) {
       container.innerHTML = `<div class="empty">${result.msg || '加载失败'}</div>`;
       return;
     }
-    const groups = result.data || [];
-    container.innerHTML = groups.map(group => {
-      if (!group.news || group.news.length === 0) return '';
-      return `
-        <div class="hotboard-group">
-          <h3>${escapeHtml(group.source)} 热榜</h3>
-          <div class="news-list">
-            ${group.news.map((item, i) => renderNewsItem(item, i)).join('')}
-          </div>
-        </div>
-      `;
-    }).join('');
-    container.querySelectorAll('.hotboard-group').forEach(g => {
-      attachNewsItemHandlers(g);
-    });
+    // 新格式：{ news: [...], bySource: [...] }
+    const news = (result.data && result.data.news) || [];
+    if (news.length === 0) {
+      container.innerHTML = '<div class="empty">暂无数据</div>';
+      return;
+    }
+    container.innerHTML = news.map((item, i) => renderNewsItem(item, i)).join('');
+    attachNewsItemHandlers(container);
   } else {
     const result = await api('/news/hotboard?source_id=baidu&limit=30');
     if (result.code !== 0) {
