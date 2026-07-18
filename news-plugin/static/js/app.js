@@ -206,73 +206,17 @@ class NewsPlayer {
       this.isPlaying = true;
       this._emit('play', { item: this.currentItem, mode: 'tts' });
 
-      // 优先使用在线TTS（百度TTS），失败回退到浏览器TTS
-      const textSegments = ttsScript.filter(s => s.type !== 'pause').map(s => s.text);
-      const onlineOk = await this._playOnlineTts(textSegments);
-
-      if (!onlineOk) {
-        // 回退到浏览器 speechSynthesis
-        if (this._ttsAvailable()) {
-          await this._speakSegments(ttsScript);
-        } else {
-          songloftToast && songloftToast('TTS 服务不可用', 'error');
-        }
+      // 在线 TTS（百度TTS）已失效，直接使用浏览器原生 speechSynthesis
+      // 等待 voices 异步加载完成
+      await this._waitForVoices(1500);
+      if (this._ttsAvailable()) {
+        await this._speakSegments(ttsScript);
+      } else {
+        songloftToast && songloftToast('当前环境不支持语音朗读（需浏览器 speechSynthesis）', 'error');
       }
     } catch (e) {
       songloftToast && songloftToast('TTS 失败: ' + (e && e.message ? e.message : String(e)), 'error');
     }
-  }
-
-  /**
-   * 在线 TTS 播放（通过后端代理百度TTS）
-   * 将文本分段，依次请求音频并播放
-   */
-  async _playOnlineTts(textSegments) {
-    try {
-      const fullText = textSegments.join(' ');
-      if (!fullText.trim()) return false;
-
-      // 按句子分段（每段不超过200字符，避免URL过长）
-      const chunks = this._splitTextForTts(fullText, 200);
-      if (chunks.length === 0) return false;
-
-      for (const chunk of chunks) {
-        if (!chunk.trim()) continue;
-        if (!this.isPlaying) return true; // 已停止
-        await this._playTtsChunk(chunk);
-      }
-      return true;
-    } catch (e) {
-      console.warn('Online TTS failed:', e);
-      return false;
-    }
-  }
-
-  /**
-   * 将长文本按句子分割为TTS可处理的短段
-   */
-  _splitTextForTts(text, maxLen) {
-    const chunks = [];
-    const sentences = text.split(/([。！？\n.!?])/);
-    let current = '';
-    for (let i = 0; i < sentences.length; i++) {
-      const s = sentences[i];
-      if (current.length + s.length > maxLen) {
-        if (current) chunks.push(current);
-        if (s.length > maxLen) {
-          for (let j = 0; j < s.length; j += maxLen) {
-            chunks.push(s.slice(j, j + maxLen));
-          }
-          current = '';
-        } else {
-          current = s;
-        }
-      } else {
-        current += s;
-      }
-    }
-    if (current) chunks.push(current);
-    return chunks;
   }
 
   /**
@@ -288,49 +232,6 @@ class NewsPlayer {
       .trim();
   }
 
-  /**
-   * 构建百度TTS URL（不校验Referer，App端可用）
-   */
-  _buildBaiduTtsUrl(text) {
-    return 'https://tts.baidu.com/text2audio'
-      + '?tex=' + encodeURIComponent(text)
-      + '&cuid=baike'
-      + '&lan=ZH'
-      + '&ctp=1'
-      + '&pdt=301'
-      + '&vol=9'
-      + '&rate=5'
-      + '&per=0';
-  }
-
-  /**
-   * 播放单段TTS音频（直接构建百度TTS URL，audio标签直接加载）
-   */
-  async _playTtsChunk(text) {
-    const cleanText = this._cleanTtsText(text).slice(0, 200);
-    if (!cleanText) return;
-
-    const ttsUrl = this._buildBaiduTtsUrl(cleanText);
-
-    return new Promise((resolve) => {
-      this.audio.src = ttsUrl;
-      this.audio.playbackRate = this.ttsConfig.rate || 1.0;
-      this.audio.volume = this.ttsConfig.volume || 1.0;
-
-      const cleanup = () => {
-        this.audio.removeEventListener('ended', onEnd);
-        this.audio.removeEventListener('error', onErr);
-      };
-      const onEnd = () => { cleanup(); resolve(); };
-      const onErr = () => { cleanup(); resolve(); };
-
-      this.audio.addEventListener('ended', onEnd);
-      this.audio.addEventListener('error', onErr);
-
-      this.audio.play().catch(() => { cleanup(); resolve(); });
-    });
-  }
-  
   _speakSegments(segments) {
     return new Promise((resolve) => {
       const synth = window.speechSynthesis;

@@ -3,8 +3,6 @@ import pengpai from './pengpai';
 import wangyi from './wangyi';
 import baidu from './baidu';
 import zhihu from './zhihu';
-import ximalaya from './ximalaya';
-import dedao from './dedao';
 import weibo from './weibo';
 import kr36 from './36kr';
 import ithome from './ithome';
@@ -24,8 +22,6 @@ export const sources = [
   { id: 'toutiao', name: '今日头条', supportAudio: false, supportTts: true },
   { id: 'pengpai', name: '澎湃新闻', supportAudio: false, supportTts: true },
   { id: 'wangyi', name: '网易新闻', supportAudio: false, supportTts: true },
-  { id: 'ximalaya', name: '喜马拉雅', supportAudio: true, supportTts: false },
-  { id: 'dedao', name: '得到', supportAudio: true, supportTts: true },
 ];
 
 export const toutiaoModule = toutiao;
@@ -33,8 +29,6 @@ export const pengpaiModule = pengpai;
 export const wangyiModule = wangyi;
 export const baiduModule = baidu;
 export const zhihuModule = zhihu;
-export const ximalayaModule = ximalaya;
-export const dedaoModule = dedao;
 export const weiboModule = weibo;
 export const kr36Module = kr36;
 export const ithomeModule = ithome;
@@ -48,8 +42,6 @@ export const platformModules: Record<string, any> = {
   wangyi,
   baidu,
   zhihu,
-  ximalaya,
-  dedao,
   weibo,
   '36kr': kr36,
   ithome,

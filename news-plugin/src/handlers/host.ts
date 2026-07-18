@@ -7,8 +7,9 @@
 //   4. 插件返回真实可播放 URL（+可选 headers，如 Referer）
 //   5. 宿主用原生播放器播放该 URL
 //
-// 不依赖 songs.create 权限，也不需要宿主额外支持远程 Song。
-// source_data 由插件自定义，宿主只透传。
+// 注意：百度TTS接口已失效（返回 502 "Not verified user"），
+// TTS 朗读只能依赖插件 WebView 内的浏览器原生 speechSynthesis，
+// 不再在宿主原生播放器中播放 TTS 新闻。
 
 import {
   createSearchHandler,
@@ -17,16 +18,14 @@ import {
 import type { SearchResultItem } from '@songloft/plugin-sdk';
 import { platformModules } from '../newsSdk/facade';
 import type { NewsItem } from '../types';
-import { buildBaiduTtsUrl } from '../utils/tts';
 
-// 只在这些源里搜可播放内容（有音频的 + 支持TTS的）
-const PLAYABLE_SOURCES = ['ximalaya', 'dedao', 'weibo', 'zhihu', 'baidu', '36kr', 'ithome', 'huxiu', 'sspai', 'juejin'];
+// 只在这些源里搜可播放内容（已全部为文字源，需通过 TTS 朗读）
+const PLAYABLE_SOURCES = ['weibo', 'zhihu', 'baidu', '36kr', 'ithome', 'huxiu', 'sspai', 'juejin', 'toutiao', 'pengpai', 'wangyi'];
 
 interface NewsSourceData {
   source: string;
   newsId: string;
   audioUrl?: string;
-  ttsUrl?: string;
   title: string;
   artist?: string;
   coverUrl?: string;
@@ -47,7 +46,6 @@ async function loadPlayableNews(sourceId: string, limit: number): Promise<NewsIt
     const boards = await module.hotboard.boards();
     if (boards.length === 0) return [];
     const result = await module.hotboard.list(boards[0].id, 1, limit);
-    // 所有新闻都可以通过TTS播放，不再过滤audioUrl
     return result.news;
   } catch {
     return [];
@@ -68,9 +66,6 @@ function newsToSearchResult(n: NewsItem): SearchResultItem {
   // 估算时长：中文约240字/分钟
   const estimatedDuration = isTts ? Math.ceil(ttsText.length / 240 * 60) : (n.audioDuration || 0);
 
-  // TTS 模式直接生成百度 TTS URL（不校验 Referer，App 端可用）
-  const ttsUrl = isTts ? buildBaiduTtsUrl(ttsText) : undefined;
-
   return {
     title: n.title,
     artist: n.sourceName || n.author || n.source,
@@ -81,7 +76,6 @@ function newsToSearchResult(n: NewsItem): SearchResultItem {
       source: n.source,
       newsId: n.id,
       audioUrl: n.audioUrl,
-      ttsUrl,
       title: n.title,
       artist: n.sourceName || n.author || n.source,
       coverUrl: n.cover,
@@ -128,6 +122,9 @@ export const hostSearchHandler = createSearchHandler({
  * 宿主播放解析：POST /api/music/url
  * body: { source_data, fallback? }
  * resp: { url, headers? } 或 { error: 'source_not_available' }
+ *
+ * 注意：百度TTS已失效，TTS新闻无法在宿主原生播放器中播放，
+ * 这里只返回原生音频URL（如果有），否则抛错让宿主降级。
  */
 export const hostMusicUrlHandler = createMusicUrlHandler({
   async resolveUrl(sourceData: Record<string, unknown>) {
@@ -138,48 +135,44 @@ export const hostMusicUrlHandler = createMusicUrlHandler({
 
     // 有原生音频URL的，直接返回
     if (sd.audioUrl) {
-      return {
-        url: sd.audioUrl,
-        headers: sd.source === 'ximalaya' ? { Referer: 'https://www.ximalaya.com/' } : undefined,
-      };
+      return { url: sd.audioUrl };
     }
 
-    // TTS 新闻：优先用预生成的 ttsUrl，否则现场生成
+    // TTS 新闻：宿主原生播放器无法播放，明确报错
     if (sd.isTts) {
-      if (sd.ttsUrl) {
-        return { url: sd.ttsUrl };
-      }
-      if (sd.ttsText) {
-        const text = sd.ttsText.slice(0, 200);
-        return { url: buildBaiduTtsUrl(text) };
-      }
+      throw new Error('TTS news cannot be played in native player, please use plugin webview');
     }
 
     // 没有音频也不是TTS的，返回错误
     throw new Error('no audio available');
   },
-  // 宿主下发 fallback hint 时，按标题在喜马拉雅搜
+  // 宿主下发 fallback hint 时，按标题在各源中搜
   async fallbackSearch(hint) {
     try {
-      const module = platformModules['ximalaya'];
-      if (!module?.hotboard) return null;
-      const boards = await module.hotboard.boards();
-      if (!boards.length) return null;
-      const result = await module.hotboard.list(boards[0].id, 1, 50);
-      const match = result.news.find(n =>
-        n.audioUrl && n.title.includes(hint.title)
-      );
-      if (!match) return null;
-      return {
-        source_data: {
-          source: match.source,
-          newsId: match.id,
-          audioUrl: match.audioUrl,
-          title: match.title,
-        } as NewsSourceData,
-        title: match.title,
-        artist: match.sourceName,
-      };
+      const sourceIds = Object.keys(platformModules);
+      for (const sid of sourceIds) {
+        const module = platformModules[sid];
+        if (!module?.hotboard) continue;
+        const boards = await module.hotboard.boards();
+        if (!boards.length) continue;
+        const result = await module.hotboard.list(boards[0].id, 1, 30);
+        const match = result.news.find(n =>
+          n.audioUrl && n.title.includes(hint.title)
+        );
+        if (match) {
+          return {
+            source_data: {
+              source: match.source,
+              newsId: match.id,
+              audioUrl: match.audioUrl,
+              title: match.title,
+            } as NewsSourceData,
+            title: match.title,
+            artist: match.sourceName,
+          };
+        }
+      }
+      return null;
     } catch {
       return null;
     }

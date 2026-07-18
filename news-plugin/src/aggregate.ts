@@ -17,8 +17,6 @@ const PLATFORM_CONFIG: Record<string, {
   sspai:     { weight: 0.75, category: 'tech',     enabled: true  },
   pengpai:   { weight: 0.75, category: 'news',     enabled: true  },
   wangyi:    { weight: 0.7,  category: 'news',     enabled: true  },
-  ximalaya:  { weight: 0.5,  category: 'audio',    enabled: false },
-  dedao:     { weight: 0.5,  category: 'knowledge', enabled: false },
 };
 
 const CATEGORY_NAMES: Record<string, string> = {

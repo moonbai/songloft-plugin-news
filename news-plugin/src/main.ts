@@ -9,7 +9,6 @@ import { sources, platformModules } from './newsSdk/facade';
 import { createSearchHandlers, createNewsHandlers, createSourceHandlers, createPlayerHandlers } from './handlers';
 import { hostSearchHandler, hostMusicUrlHandler } from './handlers/host';
 import { getAggregatedHotboard } from './aggregate';
-import { buildBaiduTtsUrl } from './utils/tts';
 
 let router: ReturnType<typeof createRouter> | null = null;
 let runtimeManager: RuntimeManager | null = null;
@@ -24,8 +23,6 @@ const SOURCE_NAMES: Record<string, string> = {
   toutiao: '头条',
   '36kr': '36氪',
   pengpai: '澎湃',
-  ximalaya: '喜马拉雅',
-  dedao: '得到',
   ithome: 'IT之家',
   huxiu: '虎嗅',
   sspai: '少数派',
@@ -82,26 +79,17 @@ function setupRouter(): void {
   router.post('/api/player/register-song', playerHandlers.registerSong);
   router.post('/api/player/register-batch', playerHandlers.registerBatch);
 
-  // TTS 在线音频 - 返回百度TTS音频URL，前端audio标签直接加载
-  // 百度TTS不校验Referer，App原生播放器也能正常播放
+  // TTS 音频接口 - 百度TTS已失效（返回502 "Not verified user"），
+  // 此端点保留以兼容旧前端调用，但返回明确错误。
+  // 前端应直接使用浏览器原生 speechSynthesis 进行朗读。
   router.get('/api/player/tts-audio', async (req) => {
-    try {
-      const query = parseQuery(req.query);
-      const text = String(query.text || '');
-      if (!text) return jsonResponse({ code: 400, msg: 'text is required' }, 400);
-
-      // 百度TTS单次限制约200字符，截断处理
-      const truncated = text.slice(0, 200);
-      const ttsUrl = buildBaiduTtsUrl(truncated);
-
-      return jsonResponse({
-        code: 0,
-        url: ttsUrl,
-      });
-    } catch (e) {
-      songloft.log.error('tts-audio error: ' + (e as Error).message);
-      return jsonResponse({ code: 500, msg: 'TTS failed: ' + (e as Error).message }, 500);
-    }
+    const query = parseQuery(req.query);
+    const text = String(query.text || '');
+    if (!text) return jsonResponse({ code: 400, msg: 'text is required' }, 400);
+    return jsonResponse({
+      code: 502,
+      msg: 'Online TTS service is no longer available, please use browser speechSynthesis',
+    }, 502);
   });
 
   // 歌单列表（参考电台插件，前端通过 P.apiGet 调用）

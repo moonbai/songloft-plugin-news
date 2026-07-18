@@ -5,7 +5,7 @@ import { sources, platformModules } from '../newsSdk/facade';
 import { successResponse, errorResponse, badRequestResponse, parseJsonBody } from './response';
 import type { NewsItem } from '../types';
 
-const HOTBOARD_SOURCES = ['baidu', 'zhihu', 'wangyi', 'weibo', '36kr', 'ithome', 'huxiu', 'sspai', 'juejin', 'toutiao', 'pengpai', 'ximalaya', 'dedao'];
+const HOTBOARD_SOURCES = ['baidu', 'zhihu', 'wangyi', 'weibo', '36kr', 'ithome', 'huxiu', 'sspai', 'juejin', 'toutiao', 'pengpai'];
 
 async function loadHotboardNews(sourceId: string, limit: number): Promise<NewsItem[]> {
   const module = platformModules[sourceId];

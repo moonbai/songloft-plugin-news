@@ -3,7 +3,6 @@ import { parseQuery } from '@songloft/plugin-sdk';
 import type { HTTPRequest, CreateSongInput, Song } from '@songloft/plugin-sdk';
 import { platformModules } from '../newsSdk/facade';
 import { successResponse, errorResponse, badRequestResponse, parseJsonBody } from './response';
-import { buildBaiduTtsUrl } from '../utils/tts';
 import {
   getPlaylists, addToPlaylist, removeFromPlaylist, clearPlaylist,
   getTtsConfig, setTtsConfig,
@@ -14,10 +13,8 @@ import type { NewsItem } from '../types';
 
 /**
  * 把 NewsItem 转成官方 songs.create 的入参
- * 支持原生音频和TTS两种模式：
- * - 原生音频：url 填 audioUrl
- * - TTS模式：url 直接填有道TTS URL（标题+摘要，限200字避免URL过长）
- *   同时在 sourceData 中存完整信息，供 music/url 回调使用
+ * 注意：百度TTS已失效，TTS新闻只保留元数据（url 留空），
+ * 仅在插件 WebView 内通过浏览器原生 speechSynthesis 朗读。
  */
 function newsToSongInput(news: NewsItem): CreateSongInput | null {
   if (!news || !news.title) return null;
@@ -42,8 +39,9 @@ function newsToSongInput(news: NewsItem): CreateSongInput | null {
   // 估算时长：中文约240字/分钟
   const estimatedDuration = isTts ? Math.ceil(ttsText.length / 240 * 60) : (news.audioDuration || 0);
 
-  // TTS 模式：直接生成百度 TTS URL（不校验 Referer，App 端可用）
-  const url = isTts ? buildBaiduTtsUrl(ttsText) : (news.audioUrl || '');
+  // TTS 模式 url 留空（百度TTS已失效，无法在宿主原生播放器播放）
+  // 原生音频模式 url 填 audioUrl
+  const url = isTts ? '' : (news.audioUrl || '');
 
   const sourceData = JSON.stringify({
     newsId,
@@ -236,7 +234,7 @@ export function createPlayerHandlers() {
       try {
         const query = parseQuery(req.query);
         const limit = Number(query.limit) || 30;
-        const platforms = ['ximalaya', 'dedao', 'weibo', '36kr', 'toutiao', 'wangyi', 'pengpai', 'baidu', 'zhihu'];
+        const platforms = ['weibo', '36kr', 'toutiao', 'wangyi', 'pengpai', 'baidu', 'zhihu'];
 
         const promises = platforms.map(async (sourceId) => {
           try {
