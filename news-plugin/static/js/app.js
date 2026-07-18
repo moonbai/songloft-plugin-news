@@ -374,38 +374,8 @@ const API_BASE = './api';
 let player = null;
 let currentTab = 'hotboard';
 
-// 优先使用宿主提供的 window.SongloftPlugin（自动带 access_token + 503 重试），
-// 回退到裸 fetch（浏览器直接打开时兼容）
-const hostBridge = (typeof window !== 'undefined' && window.SongloftPlugin) ? window.SongloftPlugin : null;
-
 async function api(path, options = {}) {
   try {
-    const method = (options.method || 'GET').toUpperCase();
-    const hasBody = options.body !== undefined && options.body !== null;
-
-    // 宿主桥接可用时走 apiGet/apiPost 等（自动带 token）
-    if (hostBridge) {
-      let result;
-      if (method === 'GET' && !hasBody) {
-        result = await hostBridge.apiGet(path);
-      } else if (method === 'POST') {
-        result = await hostBridge.apiPost(path, options.body || {});
-      } else if (method === 'PUT') {
-        result = await hostBridge.apiPut(path, options.body || {});
-      } else if (method === 'DELETE') {
-        result = await hostBridge.apiDelete(path, options.body || {});
-      } else {
-        // 兜底用裸 fetch
-        result = await fetchJson(path, options);
-      }
-      // 宿主桥接返回的可能是已解析对象或 Response
-      if (result && typeof result.json === 'function') {
-        return await result.json();
-      }
-      return result;
-    }
-
-    // 回退：裸 fetch（浏览器直接打开 / 无宿主桥接）
     return await fetchJson(path, options);
   } catch (e) {
     return { code: -1, msg: 'Network error: ' + (e && e.message ? e.message : String(e)) };
