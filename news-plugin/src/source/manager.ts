@@ -31,7 +31,7 @@ export class SourceManager {
       try {
         await this.runtimeManager.loadSource(source.id, source.script);
       } catch (e) {
-        songloft.log.error(`Failed to load source ${source.id}:`, e);
+        songloft.log.error(`Failed to load source ${source.id}: ${(e as Error).message}`);
       }
     }
   }
@@ -60,7 +60,7 @@ export class SourceManager {
 
     if (source.enabled) {
       this.runtimeManager.loadSource(source.id, source.script).catch(e => {
-        songloft.log.error(`Failed to load source ${source.id}:`, e);
+        songloft.log.error(`Failed to load source ${source.id}: ${(e as Error).message}`);
       });
     }
 
@@ -69,12 +69,28 @@ export class SourceManager {
 
   /**
    * 从 URL 导入 source
+   * 安全限制：仅允许 https，禁止内网地址（防 SSRF）
    */
   async importFromUrl(url: string): Promise<CustomSource | CustomSource[]> {
+    let parsedUrl: URL;
     try {
-      new URL(url);
+      parsedUrl = new URL(url);
     } catch {
       throw new Error('无效的 URL');
+    }
+
+    // 仅允许 https（防中间人篡改脚本）
+    if (parsedUrl.protocol !== 'https:') {
+      throw new Error('仅支持 https:// URL（安全限制）');
+    }
+
+    // 禁止内网地址 / 回环（防 SSRF）
+    const host = parsedUrl.hostname.toLowerCase();
+    if (host === 'localhost' || host === '127.0.0.1' || host === '::1' ||
+        host.startsWith('10.') || host.startsWith('192.168.') ||
+        host.startsWith('169.254.') || host.endsWith('.local') ||
+        /^172\.(1[6-9]|2\d|3[01])\./.test(host)) {
+      throw new Error('禁止从内网地址导入（安全限制）');
     }
 
     const MAX_SIZE = 5 * 1024 * 1024;
@@ -101,7 +117,7 @@ export class SourceManager {
         this.sources.set(source.id, source);
         if (source.enabled) {
           this.runtimeManager.loadSource(source.id, source.script).catch(e => {
-            songloft.log.error(`Failed to load source ${source.id}:`, e);
+            songloft.log.error('Failed to load source ' + source.id + ': ' + (e as Error).message);
           });
         }
       }
@@ -128,7 +144,7 @@ export class SourceManager {
       this.sources.set(source.id, source);
       if (source.enabled) {
         this.runtimeManager.loadSource(source.id, source.script).catch(e => {
-          songloft.log.error(`Failed to load source ${source.id}:`, e);
+          songloft.log.error(`Failed to load source ${source.id}: ${(e as Error).message}`);
         });
       }
     }
@@ -159,7 +175,7 @@ export class SourceManager {
 
     if (enabled) {
       this.runtimeManager.loadSource(source.id, source.script).catch(e => {
-        songloft.log.error(`Failed to load source ${source.id}:`, e);
+        songloft.log.error(`Failed to load source ${source.id}: ${(e as Error).message}`);
       });
     } else {
       await this.runtimeManager.unloadSource(id);

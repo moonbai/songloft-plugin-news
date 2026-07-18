@@ -1,5 +1,28 @@
 # 更新日志
 
+## v1.3.0 (2026-07-18)
+
+### 重大重构 - 对齐官方 SDK
+
+#### 改进
+- **改用官方 @songloft/plugin-sdk**：删除本地 SDK 副本（src/@songloft/plugin-sdk/）和手写 globals.d.ts，统一使用官方 SDK 提供的 `createRouter` / `jsonResponse` / `parseQuery` 和全局类型声明
+- **去掉 storage 双重序列化**：`songloft.storage` 已自动 JSON 序列化，移除手写 `JSON.stringify`/`JSON.parse`，直接存取对象（player/storage.ts、source/storage.ts）
+- **crypto 签名对齐官方**：子 VM 的 `aesEncrypt` / `aesDecrypt` 参数顺序从 `(data, key, iv, mode)` 改为官方的 `(buffer, mode, key, iv)`，新增 `sha1` / `sha256Bytes` / `rc4` 方法
+- **HTTP 请求类型修正**：所有 handler 去掉 `req as any`，使用官方 `HTTPRequest` 类型；`req.query` 是原始字符串，统一用 `parseQuery` 解析
+- **生命周期修复**：`onInit` 中用 `void sourceManager.loadAllEnabled().catch(...)` 替代 `setTimeout(..., 100)`，避免阻塞初始化
+- **日志调用修正**：官方 `log.error` 只接受单个 string 参数，所有 `log.error('msg:', e)` 改为 `log.error('msg: ' + e.message)`
+
+#### 新增
+- **聚合热搜 TTL 缓存**：抽取到独立 aggregate.ts 模块，60s 缓存避免每次请求全量抓取 9 个平台
+- **URL 导入安全防护**：source/manager.ts 仅允许 https://，禁止 localhost / 内网地址 / .local 域名（防 SSRF）
+- **ZIP DEFLATE 支持**：source/parser.ts 使用宿主 `__go_raw_inflate` 解压 DEFLATE 压缩的 ZIP 条目，并加 50MB zip-bomb 防护
+- **前端 API 桥接**：app.js 优先使用宿主 `window.SongloftPlugin`（自动带 access_token + 503 重试），无宿主时回退裸 fetch
+- **CSS 主题适配**：style.css 使用 `--md-*` 宿主主题变量，自动适配亮/暗主题
+
+#### 清理
+- 删除 runtime.ts 中的死代码（空 handleEvent 方法、重复的 parseScriptMetadata 函数）
+- 业务 helper（parseJsonBody、successResponse 等）从 SDK 副本迁移到 utils/http.ts
+
 ## v1.2.3 (2026-07-18)
 
 ### 修复

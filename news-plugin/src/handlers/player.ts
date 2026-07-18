@@ -1,4 +1,6 @@
 // 播放器 HTTP 处理
+import { parseQuery } from '@songloft/plugin-sdk';
+import type { HTTPRequest } from '@songloft/plugin-sdk';
 import { platformModules } from '../newsSdk/facade';
 import { successResponse, errorResponse, badRequestResponse, parseJsonBody } from './response';
 import {
@@ -14,12 +16,11 @@ export function createPlayerHandlers() {
     /**
      * 解析新闻的播放信息（包含 audioUrl、是否支持 TTS 等）
      */
-    async resolve(req: unknown) {
+    async resolve(req: HTTPRequest) {
       try {
-        const request = req as any;
-        if (!request.body) return badRequestResponse('No body');
+        if (!req.body) return badRequestResponse('No body');
 
-        const parsed = parseJsonBody(request.body);
+        const parsed = parseJsonBody(req.body);
         const news = parsed.news as NewsItem;
         const enableTts = parsed.enableTts !== false;
 
@@ -62,12 +63,11 @@ export function createPlayerHandlers() {
     /**
      * 添加到播放列表
      */
-    async addToPlaylist(req: unknown) {
+    async addToPlaylist(req: HTTPRequest) {
       try {
-        const request = req as any;
-        if (!request.body) return badRequestResponse('No body');
+        if (!req.body) return badRequestResponse('No body');
 
-        const parsed = parseJsonBody(request.body);
+        const parsed = parseJsonBody(req.body);
         const news = parsed.news as NewsItem;
         const listName = String(parsed.listName || 'default');
 
@@ -97,10 +97,9 @@ export function createPlayerHandlers() {
     /**
      * 从播放列表移除
      */
-    async removeFromPlaylist(req: unknown) {
+    async removeFromPlaylist(req: HTTPRequest) {
       try {
-        const request = req as any;
-        const query = request.query || {};
+        const query = parseQuery(req.query);
         const id = String(query.id || '');
         const source = String(query.source || '');
         const listName = String(query.listName || 'default');
@@ -117,10 +116,10 @@ export function createPlayerHandlers() {
     /**
      * 获取播放列表
      */
-    async getPlaylists(req: unknown) {
+    async getPlaylists(req: HTTPRequest) {
       try {
-        const request = req as any;
-        const listName = String(request.query?.listName || 'default');
+        const query = parseQuery(req.query);
+        const listName = String(query.listName || 'default');
         const all = await getPlaylists();
         const list = all.find(p => p.name === listName) || { name: listName, items: [] };
         return successResponse(list);
@@ -132,10 +131,10 @@ export function createPlayerHandlers() {
     /**
      * 清空播放列表
      */
-    async clearPlaylist(req: unknown) {
+    async clearPlaylist(req: HTTPRequest) {
       try {
-        const request = req as any;
-        const listName = String(request.query?.listName || 'default');
+        const query = parseQuery(req.query);
+        const listName = String(query.listName || 'default');
         await clearPlaylist(listName);
         return successResponse({ success: true });
       } catch (e) {
@@ -146,7 +145,7 @@ export function createPlayerHandlers() {
     /**
      * 获取 TTS 配置
      */
-    async getTtsConfig(req: unknown) {
+    async getTtsConfig(req: HTTPRequest) {
       try {
         const config = await getTtsConfig();
         return successResponse(config);
@@ -158,12 +157,11 @@ export function createPlayerHandlers() {
     /**
      * 保存 TTS 配置
      */
-    async setTtsConfig(req: unknown) {
+    async setTtsConfig(req: HTTPRequest) {
       try {
-        const request = req as any;
-        if (!request.body) return badRequestResponse('No body');
+        if (!req.body) return badRequestResponse('No body');
 
-        const parsed = parseJsonBody(request.body);
+        const parsed = parseJsonBody(req.body);
         const config = parsed as unknown as TtsConfig;
         await setTtsConfig(config);
         return successResponse({ success: true });
@@ -175,10 +173,10 @@ export function createPlayerHandlers() {
     /**
      * 一键获取"可播放新闻"列表
      */
-    async getPlayableNews(req: unknown) {
+    async getPlayableNews(req: HTTPRequest) {
       try {
-        const request = req as any;
-        const limit = Number(request.query?.limit) || 30;
+        const query = parseQuery(req.query);
+        const limit = Number(query.limit) || 30;
         const platforms = ['ximalaya', 'dedao', 'weibo', '36kr', 'toutiao', 'wangyi', 'pengpai', 'baidu', 'zhihu'];
 
         const promises = platforms.map(async (sourceId) => {

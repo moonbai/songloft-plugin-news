@@ -89,13 +89,17 @@ export function parseZipSource(zipName: string, zipData: Uint8Array): CustomSour
 }
 
 /**
- * 简易 ZIP 文件解析 - 仅支持 STORED (无压缩) 的简单 ZIP
- * 对于真实使用场景，建议使用 fflate 或 jszip 等库
+ * 简易 ZIP 文件解析 - 支持 STORED (无压缩) 和 DEFLATED (压缩)
+ * DEFLATED 数据用宿主提供的 __go_raw_inflate 解压
+ * 防护：累计解压体积上限 50MB（防 zip-bomb）
  */
+const MAX_TOTAL_UNCOMPRESSED = 50 * 1024 * 1024;
+
 function extractZipFiles(zipData: Uint8Array): Record<string, string> {
   const files: Record<string, string> = {};
   let offset = 0;
-  
+  let totalUncompressed = 0;
+
   while (offset < zipData.length - 4) {
     // 查找 local file header signature: 0x04034b50
     if (
@@ -109,27 +113,62 @@ function extractZipFiles(zipData: Uint8Array): Record<string, string> {
       const uncompressedSize = zipData[offset + 22] | (zipData[offset + 23] << 8) | (zipData[offset + 24] << 16) | (zipData[offset + 25] << 24);
       const filenameLength = zipData[offset + 26] | (zipData[offset + 27] << 8);
       const extraLength = zipData[offset + 28] | (zipData[offset + 29] << 8);
-      
+
       const filenameBytes = zipData.slice(offset + 30, offset + 30 + filenameLength);
       const filename = new TextDecoder().decode(filenameBytes);
-      
+
       const dataStart = offset + 30 + filenameLength + extraLength;
       const dataEnd = dataStart + compressedSize;
       const fileData = zipData.slice(dataStart, dataEnd);
-      
-      if (compressionMethod === 0) {
-        // STORED - no compression
-        files[filename] = new TextDecoder().decode(fileData);
-      } else {
-        // DEFLATED - we can't decompress without zlib, skip
-        songloft.log.warn(`Skipping compressed file ${filename} in ZIP`);
+
+      // zip-bomb 防护
+      totalUncompressed += uncompressedSize;
+      if (totalUncompressed > MAX_TOTAL_UNCOMPRESSED) {
+        songloft.log.warn('ZIP 解压累计体积超过 50MB 上限，终止解析');
+        break;
       }
-      
+
+      if (compressionMethod === 0) {
+        // STORED - 无压缩
+        files[filename] = new TextDecoder().decode(fileData);
+      } else if (compressionMethod === 8) {
+        // DEFLATED - 用宿主 __go_raw_inflate 解压（无 zlib 头）
+        try {
+          const hexData = bytesToHex(fileData);
+          const inflatedHex = __go_raw_inflate(hexData);
+          const inflatedBytes = hexToBytes(inflatedHex);
+          files[filename] = new TextDecoder().decode(inflatedBytes);
+        } catch (e) {
+          songloft.log.warn('解压失败 ' + filename + ': ' + (e as Error).message);
+        }
+      } else {
+        songloft.log.warn('不支持的压缩方式 ' + compressionMethod + ' for ' + filename);
+      }
+
       offset = dataEnd;
     } else {
       offset++;
     }
   }
-  
+
   return files;
+}
+
+// 辅助：Uint8Array 转 hex 字符串
+function bytesToHex(bytes: Uint8Array): string {
+  let hex = '';
+  for (let i = 0; i < bytes.length; i++) {
+    hex += bytes[i].toString(16).padStart(2, '0');
+  }
+  return hex;
+}
+
+// 辅助：hex 字符串转 Uint8Array
+function hexToBytes(hex: string): Uint8Array {
+  const len = hex.length / 2;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
+  }
+  return bytes;
 }

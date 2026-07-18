@@ -1,4 +1,6 @@
 // 搜索处理
+import { parseQuery } from '@songloft/plugin-sdk';
+import type { HTTPRequest } from '@songloft/plugin-sdk';
 import { sources, platformModules } from '../newsSdk/facade';
 import { successResponse, errorResponse, badRequestResponse, parseJsonBody } from './response';
 import type { NewsItem } from '../types';
@@ -45,24 +47,23 @@ function normalizeHot(items: NewsItem[]): NewsItem[] {
 
 export function createSearchHandlers() {
   return {
-    async search(req: unknown) {
+    async search(req: HTTPRequest) {
       try {
-        const request = req as any;
-        const params = request.query || {};
+        const query = parseQuery(req.query);
 
         let keyword: string, source_id: string, page: number, page_size: number;
 
-        if (request.body) {
-          const parsed = parseJsonBody(request.body);
+        if (req.body) {
+          const parsed = parseJsonBody(req.body);
           keyword = String(parsed.keyword || '');
           source_id = String(parsed.source_id || 'all');
           page = Number(parsed.page) || 1;
           page_size = Number(parsed.page_size) || 20;
         } else {
-          keyword = String(params.keyword || '');
-          source_id = String(params.source_id || 'all');
-          page = Number(params.page) || 1;
-          page_size = Number(params.page_size) || 20;
+          keyword = String(query.keyword || '');
+          source_id = String(query.source_id || 'all');
+          page = Number(query.page) || 1;
+          page_size = Number(query.page_size) || 20;
         }
 
         if (!keyword) return badRequestResponse('Keyword is required');
@@ -96,7 +97,7 @@ export function createSearchHandlers() {
       }
     },
 
-    async getSources(req: unknown) {
+    async getSources(req: HTTPRequest) {
       try {
         return successResponse(sources);
       } catch (e) {

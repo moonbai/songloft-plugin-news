@@ -80,7 +80,7 @@ export class SourceRuntime {
       songloft.log.info(`[${this.name}] Initialized with platforms: ${this.getPlatforms().join(', ')}`);
       return true;
     } catch (error) {
-      songloft.log.error(`Failed to initialize source ${this.name}:`, error);
+      songloft.log.error(`Failed to initialize source ${this.name}: ${(error as Error).message}`);
       await this.destroy();
       return false;
     }
@@ -147,30 +147,4 @@ export class SourceRuntime {
     }
     this.inited = false;
   }
-
-  private handleEvent(data: string) {
-    // 不再需要,事件通过 __go_send → executeWait 的 events 返回
-  }
-}
-
-/**
- * 解析 JSDoc 风格元数据
- */
-export function parseScriptMetadata(script: string): ParsedScript {
-  const sources: LxSource[] = [];
-  const regex = /\/\*\*\s*\*\s*@name\s+([^\n]+)\s*\*\s*@version\s+([^\n]+)\s*\*\s*@author\s+([^\n]+)\s*\*\s*@description\s+([^\n]+)\s*\*\s*@id\s+([^\n]+)\s*\*\s*@platforms\s+([^\n]+)\s*\*\//g;
-
-  let match;
-  while ((match = regex.exec(script)) !== null) {
-    sources.push({
-      id: match[5].trim(),
-      name: match[1].trim(),
-      version: match[2].trim(),
-      author: match[3].trim(),
-      description: match[4].trim(),
-      platforms: match[6].split(',').map(s => s.trim()),
-    });
-  }
-
-  return { sources, rawScript: script };
 }

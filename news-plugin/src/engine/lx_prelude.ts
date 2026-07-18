@@ -146,21 +146,34 @@ globalThis.lx = {
         return Buffer.alloc(size, fill);
       }
     },
+    // crypto 封装对齐官方 SongloftCrypto 签名：
+    //   aesEncrypt(buffer, mode, key, iv?)  — 第 1 参 buffer，第 2 参 mode 字符串
+    //   aesDecrypt(buffer, mode, key, iv?)
+    //   md5(str) / sha1(str) / sha256Bytes(buffer) / rc4(key, data) / randomBytes(size)
     crypto: {
       md5: function(data) {
         try { return crypto.md5(data); } catch(e) { return ''; }
       },
-      aesEncrypt: function(data, key, iv, mode) {
-        try { return crypto.aesEncrypt(data, key, iv, mode); } catch(e) { return ''; }
+      sha1: function(data) {
+        try { return crypto.sha1(data); } catch(e) { return ''; }
       },
-      aesDecrypt: function(data, key, iv, mode) {
-        try { return crypto.aesDecrypt(data, key, iv, mode); } catch(e) { return ''; }
+      sha256Bytes: function(buffer) {
+        try { return crypto.sha256Bytes(buffer); } catch(e) { return ''; }
       },
-      rsaEncrypt: function(data, key) {
-        try { return crypto.rsaEncrypt(data, key); } catch(e) { return ''; }
+      aesEncrypt: function(buffer, mode, key, iv) {
+        try { return crypto.aesEncrypt(buffer, mode, key, iv); } catch(e) { return ''; }
       },
-      randomBytes: function(n) {
-        try { return crypto.randomBytes(n); } catch(e) { return ''; }
+      aesDecrypt: function(buffer, mode, key, iv) {
+        try { return crypto.aesDecrypt(buffer, mode, key, iv); } catch(e) { return ''; }
+      },
+      rsaEncrypt: function(buffer, publicKeyPEM) {
+        try { return crypto.rsaEncrypt(buffer, publicKeyPEM); } catch(e) { return ''; }
+      },
+      rc4: function(key, data) {
+        try { return crypto.rc4(key, data); } catch(e) { return ''; }
+      },
+      randomBytes: function(size) {
+        try { return crypto.randomBytes(size); } catch(e) { return ''; }
       }
     },
     zlib: {

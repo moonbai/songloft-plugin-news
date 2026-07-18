@@ -1,4 +1,5 @@
-// 播放列表存储 (async — 官方 SDK storage 返回 Promise)
+// 播放列表存储
+// 官方 SDK storage 自动 JSON 序列化，可直接存对象/数组，无需手动 JSON.stringify/parse
 
 const PLAYLIST_KEY = 'news_playlists';
 const TTS_CONFIG_KEY = 'news_tts_config';
@@ -39,37 +40,40 @@ export function getDefaultTtsConfig(): TtsConfig {
 
 export async function getTtsConfig(): Promise<TtsConfig> {
   try {
-    const raw = await songloft.storage.get(TTS_CONFIG_KEY);
-    if (!raw) return getDefaultTtsConfig();
-    return { ...getDefaultTtsConfig(), ...JSON.parse(raw) };
+    // 官方 storage.get 返回原类型值（自动反序列化），无需 JSON.parse
+    const config = await songloft.storage.get(TTS_CONFIG_KEY) as TtsConfig | null;
+    if (!config) return getDefaultTtsConfig();
+    return { ...getDefaultTtsConfig(), ...config };
   } catch (e) {
+    songloft.log.warn('Failed to load TTS config: ' + (e as Error).message);
     return getDefaultTtsConfig();
   }
 }
 
 export async function setTtsConfig(config: TtsConfig): Promise<void> {
   try {
-    await songloft.storage.set(TTS_CONFIG_KEY, JSON.stringify(config));
+    // 官方 storage.set 自动序列化，直接传对象
+    await songloft.storage.set(TTS_CONFIG_KEY, config);
   } catch (e) {
-    songloft.log.error('Failed to save TTS config:', e);
+    songloft.log.error('Failed to save TTS config: ' + (e as Error).message);
   }
 }
 
 export async function getPlaylists(): Promise<{ name: string; items: PlaylistItem[] }[]> {
   try {
-    const raw = await songloft.storage.get(PLAYLIST_KEY);
-    if (!raw) return [];
-    return JSON.parse(raw);
+    const playlists = await songloft.storage.get(PLAYLIST_KEY) as { name: string; items: PlaylistItem[] }[] | null;
+    return playlists || [];
   } catch (e) {
+    songloft.log.warn('Failed to load playlists: ' + (e as Error).message);
     return [];
   }
 }
 
 export async function setPlaylists(playlists: { name: string; items: PlaylistItem[] }[]): Promise<void> {
   try {
-    await songloft.storage.set(PLAYLIST_KEY, JSON.stringify(playlists));
+    await songloft.storage.set(PLAYLIST_KEY, playlists);
   } catch (e) {
-    songloft.log.error('Failed to save playlists:', e);
+    songloft.log.error('Failed to save playlists: ' + (e as Error).message);
   }
 }
 

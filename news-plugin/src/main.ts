@@ -1,15 +1,30 @@
 // main.ts - 新闻资讯插件主入口
 // 生命周期: onInit / onDeinit / onHTTPRequest
 
-import { createRouter, jsonResponse } from './@songloft/plugin-sdk';
+import { createRouter, jsonResponse, parseQuery } from '@songloft/plugin-sdk';
+import type { HTTPRequest, HTTPResponse, RouteHandler } from '@songloft/plugin-sdk';
 import { RuntimeManager } from './engine';
 import { SourceManager } from './source';
 import { sources, platformModules } from './newsSdk/facade';
 import { createSearchHandlers, createNewsHandlers, createSourceHandlers, createPlayerHandlers } from './handlers';
+import { getAggregatedHotboard } from './aggregate';
 
 let router: ReturnType<typeof createRouter> | null = null;
 let runtimeManager: RuntimeManager | null = null;
 let sourceManager: SourceManager | null = null;
+
+// 平台 ID 到名称的映射（聚合热搜用）
+const SOURCE_NAMES: Record<string, string> = {
+  baidu: '百度',
+  weibo: '微博',
+  zhihu: '知乎',
+  wangyi: '网易',
+  toutiao: '头条',
+  '36kr': '36氪',
+  pengpai: '澎湃',
+  ximalaya: '喜马拉雅',
+  dedao: '得到',
+};
 
 /**
  * 标题归一化：用于跨平台去重
@@ -59,105 +74,15 @@ function setupRouter(): void {
   router.post('/api/player/tts-config', playerHandlers.setTtsConfig);
   router.get('/api/player/playable', playerHandlers.getPlayableNews);
 
-  // 聚合接口 - 多平台热榜聚合（去重 + 归一化排序）
+  // 聚合接口 - 多平台热榜聚合（去重 + 归一化排序，带 TTL 缓存）
   router.get('/api/aggregate/hotboard', async (req) => {
     try {
-      const limit = Number(req.query.limit) || 10;
-      const perPlatformLimit = Math.max(limit, 20); // 每个平台多取一些用于去重后仍有足够数据
-      // 所有支持 hotboard 的平台
-      const platforms = ['baidu', 'weibo', 'zhihu', 'wangyi', 'toutiao', '36kr', 'pengpai', 'ximalaya', 'dedao'];
-
-      const promises = platforms.map(async (source) => {
-        try {
-          const module = platformModules[source];
-          if (!module?.hotboard) return { source, news: [] };
-          const boards = await module.hotboard.boards();
-          if (!boards || boards.length === 0) return { source, news: [] };
-          const result = await module.hotboard.list(boards[0].id, 1, perPlatformLimit);
-          const news = result.news || [];
-          // 平台内归一化：按 hot 值在该平台内的百分位计算 hotLevel (0-100)
-          const maxHot = news.reduce((mx: number, n: any) => Math.max(mx, Number(n.hot || 0)), 0);
-          const normalized = news.map((n: any) => ({
-            ...n,
-            hotLevel: maxHot > 0 ? Math.round((Number(n.hot || 0) / maxHot) * 100) : 0,
-            sources: [source],
-          }));
-          return { source, news: normalized };
-        } catch (e) {
-          songloft.log.error('aggregate/hotboard: ' + source + ' failed: ' + (e as Error).message);
-          return { source, news: [], error: String(e) };
-        }
-      });
-
-      const results = await Promise.all(promises);
-
-      // 合并所有平台的新闻
-      const allNews: any[] = [];
-      const dedupMap = new Map<string, any>();
-
-      for (const { source, news } of results) {
-        for (const item of news) {
-          if (!item.title) continue;
-          // 标题去重：归一化后比较（去空格、转小写、去标点）
-          const key = normalizeTitle(item.title);
-          if (!key) continue;
-
-          const existing = dedupMap.get(key);
-          if (existing) {
-            // 已存在：合并来源，取最高 hotLevel，热度叠加
-            existing.sources.push(source);
-            existing.hotLevel = Math.max(existing.hotLevel, item.hotLevel);
-            existing.hotCount = (existing.hotCount || 1) + 1;
-            // 保留信息更完整的一条（有摘要/封面的优先）
-            if ((!existing.summary && item.summary) || (!existing.cover && item.cover)) {
-              existing.summary = existing.summary || item.summary;
-              existing.cover = existing.cover || item.cover;
-              existing.url = existing.url || item.url;
-            }
-          } else {
-            dedupMap.set(key, { ...item, hotCount: 1 });
-          }
-        }
-      }
-
-      // 平台 ID 到名称的映射
-      const sourceNames: Record<string, string> = {
-        baidu: '百度',
-        weibo: '微博',
-        zhihu: '知乎',
-        wangyi: '网易',
-        toutiao: '头条',
-        '36kr': '36氪',
-        pengpai: '澎湃',
-        ximalaya: '喜马拉雅',
-        dedao: '得到',
-      };
-
-      // 转数组，计算综合热度：hotLevel * (1 + 0.15 * (hotCount-1))
-      // 多平台同时上榜说明热度高，给予加成
-      const merged = Array.from(dedupMap.values()).map((item: any) => {
-        const multiSourceBonus = 1 + 0.15 * (item.hotCount - 1);
-        // 生成来源显示名称
-        const names = (item.sources || [item.source]).map((s: string) => sourceNames[s] || s);
-        return {
-          ...item,
-          source: item.sources ? item.sources[0] : item.source, // 主来源
-          sourceName: names.join('/'), // 显示所有来源
-          sourceNames: names, // 原始数组供前端使用
-          combinedHot: Math.round(item.hotLevel * multiSourceBonus),
-        };
-      });
-
-      // 按综合热度降序
-      merged.sort((a, b) => b.combinedHot - a.combinedHot);
-
-      // 截取 limit 条
-      const top = merged.slice(0, limit);
-
-      songloft.log.info('aggregate/hotboard: merged=' + merged.length + ' top=' + top.length);
-      return jsonResponse({ code: 0, msg: 'success', data: { news: top, bySource: results } });
+      const query = parseQuery(req.query);
+      const limit = Number(query.limit) || 10;
+      const data = await getAggregatedHotboard(limit, normalizeTitle, SOURCE_NAMES);
+      return jsonResponse({ code: 0, msg: 'success', data });
     } catch (e) {
-      songloft.log.error('aggregate/hotboard error:', e);
+      songloft.log.error('aggregate/hotboard error: ' + (e as Error).message);
       return jsonResponse({ code: 500, msg: 'Failed: ' + (e as Error).message }, 500);
     }
   });
@@ -192,25 +117,17 @@ function setupRouter(): void {
       await sourceManager.init();
       songloft.log.info('news plugin: storage loaded');
     } catch (e) {
-      songloft.log.error('news plugin: storage init failed, continuing without stored sources:', e);
+      songloft.log.error('news plugin: storage init failed, continuing without stored sources: ' + (e as Error).message);
     }
 
-    // 异步加载启用的 source 脚本
-    setTimeout(() => {
-      try {
-        if (sourceManager) {
-          sourceManager.loadAllEnabled().catch((e) => {
-            songloft.log.error('news plugin: failed to load enabled sources:', e);
-          });
-        }
-      } catch (e) {
-        songloft.log.error('news plugin: loadAllEnabled error:', e);
-      }
-    }, 100);
+    // 异步加载启用的 source 脚本（不阻塞 onInit 返回）
+    void sourceManager.loadAllEnabled().catch((e) => {
+      songloft.log.error('news plugin: failed to load enabled sources: ' + (e as Error).message);
+    });
 
     songloft.log.info('news plugin: initialized');
   } catch (error) {
-    songloft.log.error('news plugin: failed to initialize:', error);
+    songloft.log.error('news plugin: failed to initialize: ' + (error as Error).message);
   }
 };
 
@@ -225,11 +142,11 @@ function setupRouter(): void {
     router = null;
     songloft.log.info('news plugin: deinitialized');
   } catch (error) {
-    songloft.log.error('news plugin: failed to deinitialize:', error);
+    songloft.log.error('news plugin: failed to deinitialize: ' + (error as Error).message);
   }
 };
 
-;(globalThis as any).onHTTPRequest = async function (req: unknown): Promise<unknown> {
+;(globalThis as any).onHTTPRequest = async function (req: HTTPRequest): Promise<HTTPResponse> {
   // ⚠️ 必须永远返回合法 HTTPResponse，不能返回 undefined
   try {
     // 如果 router 尚未初始化（onInit 还没跑完），尝试同步初始化
@@ -241,11 +158,14 @@ function setupRouter(): void {
       setupRouter();
     }
 
-    // 去掉 query string
-    const r = req as Record<string, unknown>;
-    const fullPath = String(r.path || '');
-    const path = fullPath.split('?')[0];
-    const routedReq = { ...r, path };
+    // 官方 SDK 的 req.query 是原始字符串，parseQuery 解析后合并到 req 上方便 handler 使用
+    // 这里不修改原 req，而是构造一个带 parsed query 的新对象传给 router
+    const routedReq: HTTPRequest = {
+      ...req,
+      // 把解析后的 query 对象挂到 headers 旁边的自定义字段不可行（类型限制），
+      // 官方 router.handle 会把原 req 透传给 handler，handler 内部自行 parseQuery
+      path: req.path.split('?')[0],
+    };
 
     const result = await router!.handle(routedReq);
 
@@ -255,7 +175,7 @@ function setupRouter(): void {
 
     return jsonResponse({ code: 404, msg: 'Not Found', data: null }, 404);
   } catch (e) {
-    songloft.log.error('news plugin: HTTP request error:', e);
+    songloft.log.error('news plugin: HTTP request error: ' + (e as Error).message);
     return jsonResponse({ code: 500, msg: 'Internal Server Error: ' + (e as Error).message, data: null }, 500);
   }
 };

@@ -1,4 +1,6 @@
 // source 管理处理
+import { parseQuery } from '@songloft/plugin-sdk';
+import type { HTTPRequest } from '@songloft/plugin-sdk';
 import type { SourceManager } from '../source';
 import { successResponse, errorResponse, badRequestResponse, parseJsonBody } from './response';
 
@@ -7,7 +9,7 @@ export function createSourceHandlers(sourceManager: SourceManager) {
     /**
      * 获取所有 source
      */
-    async getSources(req: unknown) {
+    async getSources(req: HTTPRequest) {
       try {
         const sources = sourceManager.list().map(s => ({
           id: s.id,
@@ -29,12 +31,11 @@ export function createSourceHandlers(sourceManager: SourceManager) {
     /**
      * 导入 JS source
      */
-    async importSource(req: unknown) {
+    async importSource(req: HTTPRequest) {
       try {
-        const request = req as any;
-        if (!request.body) return badRequestResponse('No body provided');
+        if (!req.body) return badRequestResponse('No body provided');
 
-        const parsed = parseJsonBody(request.body);
+        const parsed = parseJsonBody(req.body);
 
         const name = String(parsed.name || 'imported_source');
         const content = String(parsed.content || '');
@@ -51,12 +52,11 @@ export function createSourceHandlers(sourceManager: SourceManager) {
     /**
      * 从 URL 导入
      */
-    async importSourceUrl(req: unknown) {
+    async importSourceUrl(req: HTTPRequest) {
       try {
-        const request = req as any;
-        if (!request.body) return badRequestResponse('No body provided');
+        if (!req.body) return badRequestResponse('No body provided');
 
-        const parsed = parseJsonBody(request.body);
+        const parsed = parseJsonBody(req.body);
 
         const url = String(parsed.url || '');
         if (!url) return badRequestResponse('url is required');
@@ -71,12 +71,11 @@ export function createSourceHandlers(sourceManager: SourceManager) {
     /**
      * 切换启用状态
      */
-    async toggleSource(req: unknown) {
+    async toggleSource(req: HTTPRequest) {
       try {
-        const request = req as any;
-        if (!request.body) return badRequestResponse('No body provided');
+        if (!req.body) return badRequestResponse('No body provided');
 
-        const parsed = parseJsonBody(request.body);
+        const parsed = parseJsonBody(req.body);
 
         const id = String(parsed.id || '');
         const enabled = Boolean(parsed.enabled);
@@ -95,10 +94,9 @@ export function createSourceHandlers(sourceManager: SourceManager) {
     /**
      * 删除 source
      */
-    async deleteSource(req: unknown) {
+    async deleteSource(req: HTTPRequest) {
       try {
-        const request = req as any;
-        const query = request.query || {};
+        const query = parseQuery(req.query);
         const id = String(query.id || '');
         if (!id) return badRequestResponse('id is required');
 
@@ -114,7 +112,7 @@ export function createSourceHandlers(sourceManager: SourceManager) {
     /**
      * 重新加载所有 source
      */
-    async reloadSources(req: unknown) {
+    async reloadSources(req: HTTPRequest) {
       try {
         await sourceManager.reloadAll();
         return successResponse({ success: true });
@@ -126,7 +124,7 @@ export function createSourceHandlers(sourceManager: SourceManager) {
     /**
      * 导出 source 配置
      */
-    async exportSources(req: unknown) {
+    async exportSources(req: HTTPRequest) {
       try {
         const config = sourceManager.exportConfig();
         return successResponse({ sources: config });
