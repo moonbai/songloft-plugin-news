@@ -20,6 +20,30 @@ async function loadHotboardNews(sourceId: string, limit: number): Promise<NewsIt
   }
 }
 
+/**
+ * 使用平台原生搜索接口搜索新闻
+ * 如果平台不支持原生搜索或搜索失败，回退到热榜过滤
+ */
+async function searchNews(sourceId: string, keyword: string, limit: number): Promise<NewsItem[]> {
+  const module = platformModules[sourceId];
+  if (!module) return [];
+
+  // 优先使用平台原生搜索
+  if (module.newsSearch?.search) {
+    try {
+      const result = await module.newsSearch.search(keyword, 1, limit);
+      if (result.news && result.news.length > 0) {
+        return result.news;
+      }
+    } catch {
+      // 搜索失败，回退到热榜过滤
+    }
+  }
+
+  // 回退：从热榜中过滤
+  return loadHotboardNews(sourceId, 50).then(news => filterByKeyword(news, keyword));
+}
+
 function filterByKeyword(items: NewsItem[], keyword: string): NewsItem[] {
   const kw = keyword.toLowerCase();
   return items.filter(item =>
@@ -72,9 +96,10 @@ export function createSearchHandlers() {
           ? HOTBOARD_SOURCES.filter(s => platformModules[s])
           : [source_id].filter(s => platformModules[s]);
 
+        // 使用各平台的搜索功能，失败时回退到热榜过滤
         const promises = sourceIds.map(async (sid) => {
-          const news = await loadHotboardNews(sid, 50);
-          return normalizeHot(filterByKeyword(news, keyword));
+          const news = await searchNews(sid, keyword, 30);
+          return normalizeHot(news);
         });
 
         const results = await Promise.all(promises);

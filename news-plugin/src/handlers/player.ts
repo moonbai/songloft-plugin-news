@@ -398,7 +398,7 @@ export function createPlayerHandlers() {
 
     /**
      * TTS 音频流接口 - 供宿主原生播放器调用
-     * 通过 Edge TTS 实时生成 MP3 音频并返回
+     * 通过在线 TTS 服务（Google/有道）实时生成 MP3 音频并返回
      */
     async ttsStream(req: HTTPRequest) {
       try {

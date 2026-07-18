@@ -1,118 +1,21 @@
-// Edge TTS 客户端 - 微软在线 TTS 服务（作为 speechSynthesis 的 fallback）
+// Edge TTS 客户端 - 通过后端接口获取 TTS 音频
+// 不在浏览器中直接 WebSocket 连接，而是调用后端 /api/player/tts-stream
+// 后端在 QuickJS 环境中通过 WebSocket 连接微软 Edge TTS 服务
 class EdgeTTSClient {
-  constructor() {
-    this.voice = 'zh-CN-XiaoxiaoNeural';
-    this.rate = '0%';
-    this.pitch = '0Hz';
-    this.volume = '100%';
-  }
+  async synthesize(text, config) {
+    const params = new URLSearchParams();
+    params.set('text', text);
+    if (config && config.rate != null) params.set('rate', String(config.rate));
+    if (config && config.pitch != null) params.set('pitch', String(config.pitch));
+    if (config && config.volume != null) params.set('volume', String(config.volume));
 
-  setConfig(config) {
-    if (config.voice) this.voice = config.voice;
-    if (config.rate != null) this.rate = Math.round((config.rate - 1) * 100) + '%';
-    if (config.pitch != null) this.pitch = Math.round((config.pitch - 1) * 100) + 'Hz';
-    if (config.volume != null) this.volume = Math.round(config.volume * 100) + '%';
-  }
-
-  async synthesize(text) {
-    return new Promise((resolve, reject) => {
-      const ws = new WebSocket('wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=6A5AA1D4EAFF4E9FB37E23D68491D6F4');
-      const audioChunks = [];
-      let hasError = false;
-
-      ws.binaryType = 'arraybuffer';
-
-      ws.onopen = () => {
-        const ssml = `
-<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="zh-CN">
-  <voice name="${this.voice}">
-    <prosody rate="${this.rate}" pitch="${this.pitch}" volume="${this.volume}">
-      ${this._escapeXml(text)}
-    </prosody>
-  </voice>
-</speak>`.trim();
-
-        const configMessage = `Content-Type:application/json; charset=utf-8\r\nX-RequestId:${this._generateId()}\r\nX-Timestamp:${new Date().toISOString()}\r\n\r\n${JSON.stringify({
-          context: {
-            synthesis: {
-              audio: {
-                metadataoptions: { sentenceBoundaryEnabled: false, wordBoundaryEnabled: false },
-                outputFormat: 'audio-24khz-48kbitrate-mono-mp3'
-              }
-            }
-          }
-        })}`;
-
-        const ssmlMessage = `Content-Type:application/ssml+xml\r\nX-RequestId:${this._generateId()}\r\nX-Timestamp:${new Date().toISOString()}\r\n\r\n${ssml}`;
-
-        ws.send(configMessage);
-        setTimeout(() => ws.send(ssmlMessage), 100);
-      };
-
-      ws.onmessage = (event) => {
-        if (typeof event.data === 'string') {
-          const data = event.data;
-          if (data.includes('Path:turn.end')) {
-            ws.close();
-          }
-        } else if (event.data instanceof ArrayBuffer) {
-          const buffer = new Uint8Array(event.data);
-          const separator = '\r\n\r\n';
-          const headerEnd = this._findHeaderEnd(buffer);
-          if (headerEnd > 0) {
-            const audioData = buffer.slice(headerEnd);
-            audioChunks.push(audioData);
-          }
-        }
-      };
-
-      ws.onclose = () => {
-        if (hasError) return;
-        if (audioChunks.length === 0) {
-          reject(new Error('没有接收到音频数据'));
-          return;
-        }
-        const blob = new Blob(audioChunks, { type: 'audio/mpeg' });
-        resolve(URL.createObjectURL(blob));
-      };
-
-      ws.onerror = (e) => {
-        hasError = true;
-        reject(new Error('Edge TTS 连接失败'));
-      };
-    });
-  }
-
-  _findHeaderEnd(buffer) {
-    const separator = new TextEncoder().encode('\r\n\r\n');
-    for (let i = 0; i <= buffer.length - separator.length; i++) {
-      let found = true;
-      for (let j = 0; j < separator.length; j++) {
-        if (buffer[i + j] !== separator[j]) {
-          found = false;
-          break;
-        }
-      }
-      if (found) return i + separator.length;
+    const resp = await fetch('./api/player/tts-stream?' + params.toString());
+    if (!resp.ok) {
+      const errText = await resp.text().catch(() => '');
+      throw new Error('TTS 接口返回 ' + resp.status + ': ' + errText);
     }
-    return -1;
-  }
-
-  _generateId() {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-      const r = Math.random() * 16 | 0;
-      const v = c === 'x' ? r : (r & 0x3 | 0x8);
-      return v.toString(16);
-    });
-  }
-
-  _escapeXml(text) {
-    return String(text || '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&apos;');
+    const blob = await resp.blob();
+    return URL.createObjectURL(blob);
   }
 }
 
@@ -373,24 +276,35 @@ class NewsPlayer {
       this._emit('play', { item: this.currentItem, mode: 'tts' });
 
       // 策略：优先尝试 speechSynthesis，如果不可用或失败，自动降级到 Edge TTS
+      // WebView 中通常 voices count = 0，这种情况下不等待直接降级到 Edge TTS
       const canUseSpeechSynth = this._checkSpeechSynthesis();
+      let voicesReady = false;
 
       if (canUseSpeechSynth) {
+        // 如果已经有可用 voices，直接使用；否则最多等待 1.5s（避免 WebView 长时间空等）
+        const currentVoices = window.speechSynthesis.getVoices();
+        if (currentVoices && currentVoices.length > 0) {
+          voicesReady = true;
+        } else {
+          voicesReady = await this._waitForVoices(1500);
+        }
+      }
+
+      if (voicesReady) {
         try {
-          const ok = await this._waitForVoices(3000);
-          if (ok) {
-            const zhVoice = this._pickChineseVoice();
-            if (zhVoice) {
-              console.log('[TTS] using speechSynthesis with voice:', zhVoice.lang, zhVoice.name);
-            } else {
-              console.warn('[TTS] no Chinese voice found, using default');
-            }
-            await this._speakSegments(ttsScript, zhVoice);
-            return;
+          const zhVoice = this._pickChineseVoice();
+          if (zhVoice) {
+            console.log('[TTS] using speechSynthesis with voice:', zhVoice.lang, zhVoice.name);
+          } else {
+            console.warn('[TTS] no Chinese voice found, using default');
           }
+          await this._speakSegments(ttsScript, zhVoice);
+          return;
         } catch (e) {
           console.warn('[TTS] speechSynthesis failed, falling back to Edge TTS:', e);
         }
+      } else {
+        console.log('[TTS] no voices available, using Edge TTS directly');
       }
 
       // 降级到 Edge TTS
@@ -436,19 +350,17 @@ class NewsPlayer {
     }
 
     try {
-      this.edgeTts.setConfig({
-        rate: this.ttsConfig.rate,
-        pitch: this.ttsConfig.pitch,
-        volume: this.ttsConfig.volume,
-      });
-
       // 清理之前的 audio URL
       if (this._edgeTtsAudioUrl) {
         URL.revokeObjectURL(this._edgeTtsAudioUrl);
         this._edgeTtsAudioUrl = null;
       }
 
-      const audioUrl = await this.edgeTts.synthesize(fullText);
+      const audioUrl = await this.edgeTts.synthesize(fullText, {
+        rate: this.ttsConfig.rate,
+        pitch: this.ttsConfig.pitch,
+        volume: this.ttsConfig.volume,
+      });
       this._edgeTtsAudioUrl = audioUrl;
 
       this.audio.src = audioUrl;
@@ -1095,7 +1007,6 @@ document.querySelectorAll('.tab').forEach(tab => {
     if (currentTab === 'news') loadNewsPanel();
     if (currentTab === 'player') loadPlayableNews();
     if (currentTab === 'playlist') loadPlaylist();
-    if (currentTab === 'sources') loadSourceList();
   });
 });
 
@@ -1422,119 +1333,6 @@ document.getElementById('clearPlaylistBtn').addEventListener('click', async () =
   if (result.code === 0) {
     showToast('已清空', 'success');
     loadPlaylist();
-  }
-});
-
-// 脚本管理
-async function loadSourceList() {
-  const result = await api('/custom-sources');
-  const list = document.getElementById('sourceList');
-  if (result.code !== 0 || !result.data) {
-    list.innerHTML = '<div class="empty">加载失败</div>';
-    return;
-  }
-  const sources = result.data.sources || [];
-  if (sources.length === 0) {
-    list.innerHTML = '<div class="empty">尚未导入任何自定义脚本</div>';
-    return;
-  }
-  list.innerHTML = sources.map(s => `
-    <div class="source-item" data-id="${escapeHtml(s.id)}">
-      <label class="switch">
-        <input type="checkbox" ${s.enabled ? 'checked' : ''}>
-        <span class="slider"></span>
-      </label>
-      <div class="source-info">
-        <div class="source-name">${escapeHtml(s.name)} <small>v${escapeHtml(s.version || '1.0.0')}</small></div>
-        <div class="source-meta">
-          作者: ${escapeHtml(s.author || '未知')} | 
-          平台: ${(s.platforms || []).map(escapeHtml).join(', ') || '通用'} | 
-          ${formatTime(s.updateTime)}
-        </div>
-        ${s.description ? `<div class="source-meta">${escapeHtml(s.description)}</div>` : ''}
-      </div>
-      <div class="source-actions">
-        <button class="delete-btn danger">删除</button>
-      </div>
-    </div>
-  `).join('');
-  
-  list.querySelectorAll('.source-item').forEach(item => {
-    const id = item.dataset.id;
-    const switchInput = item.querySelector('input[type="checkbox"]');
-    switchInput.addEventListener('change', async () => {
-      const result = await api('/custom-sources/toggle', {
-        method: 'PUT',
-        body: JSON.stringify({ id, enabled: switchInput.checked }),
-      });
-      if (result.code === 0) {
-        showToast(switchInput.checked ? '已启用' : '已禁用', 'success');
-      } else {
-        switchInput.checked = !switchInput.checked;
-        showToast('操作失败', 'error');
-      }
-    });
-    item.querySelector('.delete-btn').addEventListener('click', async () => {
-      if (!confirm('确认删除此脚本？')) return;
-      const result = await api(`/custom-sources?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
-      if (result.code === 0) {
-        showToast('已删除', 'success');
-        loadSourceList();
-      } else {
-        showToast('删除失败', 'error');
-      }
-    });
-  });
-}
-
-document.getElementById('importScriptBtn').addEventListener('click', async () => {
-  const name = document.getElementById('scriptName').value.trim() || 'imported';
-  const content = document.getElementById('scriptContent').value.trim();
-  if (!content) {
-    showToast('请输入脚本内容', 'error');
-    return;
-  }
-  const result = await api('/custom-sources/import', {
-    method: 'POST',
-    body: JSON.stringify({ name, content }),
-  });
-  if (result.code === 0) {
-    showToast('导入成功', 'success');
-    document.getElementById('scriptContent').value = '';
-    document.getElementById('scriptName').value = '';
-    loadSourceList();
-  } else {
-    showToast('导入失败: ' + (result.msg || ''), 'error');
-  }
-});
-
-document.getElementById('importUrlBtn').addEventListener('click', async () => {
-  const url = document.getElementById('scriptUrl').value.trim();
-  if (!url) {
-    showToast('请输入 URL', 'error');
-    return;
-  }
-  showToast('导入中...', 'info');
-  const result = await api('/custom-sources/import-url', {
-    method: 'POST',
-    body: JSON.stringify({ url }),
-  });
-  if (result.code === 0) {
-    showToast('导入成功', 'success');
-    document.getElementById('scriptUrl').value = '';
-    loadSourceList();
-  } else {
-    showToast('导入失败: ' + (result.msg || ''), 'error');
-  }
-});
-
-document.getElementById('reloadSourcesBtn').addEventListener('click', async () => {
-  const result = await api('/custom-sources/reload', { method: 'POST' });
-  if (result.code === 0) {
-    showToast('已重新加载', 'success');
-    loadSourceList();
-  } else {
-    showToast('重载失败', 'error');
   }
 });
 

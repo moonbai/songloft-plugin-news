@@ -6,7 +6,7 @@ import type { HTTPRequest, HTTPResponse, RouteHandler } from '@songloft/plugin-s
 import { RuntimeManager } from './engine';
 import { SourceManager } from './source';
 import { sources, platformModules } from './newsSdk/facade';
-import { createSearchHandlers, createNewsHandlers, createSourceHandlers, createPlayerHandlers } from './handlers';
+import { createSearchHandlers, createNewsHandlers, createPlayerHandlers } from './handlers';
 import { hostSearchHandler, hostMusicUrlHandler } from './handlers/host';
 import { getAggregatedHotboard } from './aggregate';
 
@@ -56,15 +56,7 @@ function setupRouter(): void {
   router.get('/api/news/hotboard', newsHandlers.getHotboard);
   router.get('/api/news/boards', newsHandlers.getBoards);
 
-  // source 管理
-  const sourceHandlers = createSourceHandlers(sourceManager!);
-  router.get('/api/custom-sources', sourceHandlers.getSources);
-  router.post('/api/custom-sources/import', sourceHandlers.importSource);
-  router.post('/api/custom-sources/import-url', sourceHandlers.importSourceUrl);
-  router.put('/api/custom-sources/toggle', sourceHandlers.toggleSource);
-  router.delete('/api/custom-sources', sourceHandlers.deleteSource);
-  router.post('/api/custom-sources/reload', sourceHandlers.reloadSources);
-  router.get('/api/custom-sources/export', sourceHandlers.exportSources);
+  // source 管理（已移除自定义脚本导入功能）
 
   // 播放器
   const playerHandlers = createPlayerHandlers();
@@ -157,7 +149,6 @@ function setupRouter(): void {
       msg: 'OK',
       data: {
         sources: sources.length,
-        customSources: sourceManager ? sourceManager.list().length : 0,
       },
     });
   });

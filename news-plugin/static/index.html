@@ -16,7 +16,6 @@
         <button class="tab" data-tab="player">可播放</button>
         <button class="tab" data-tab="playlist">播放列表</button>
         <button class="tab" data-tab="search">搜索</button>
-        <button class="tab" data-tab="sources">脚本管理</button>
       </nav>
     </header>
 
@@ -102,61 +101,6 @@
         <div id="playlistList" class="news-list"></div>
       </section>
 
-      <!-- 脚本管理 -->
-      <section class="panel" id="panel-sources">
-        <div class="toolbar">
-          <h2>自定义解析脚本</h2>
-          <button id="reloadSourcesBtn">重新加载</button>
-        </div>
-        <div class="source-import">
-          <h3>导入脚本</h3>
-          <textarea id="scriptContent" placeholder="粘贴 JS 脚本内容（需包含 JSDoc 元数据）"></textarea>
-          <input type="text" id="scriptName" placeholder="脚本名称">
-          <button id="importScriptBtn">导入 JS</button>
-
-          <h4>或从 URL 导入</h4>
-          <input type="text" id="scriptUrl" placeholder="https://example.com/source.js 或 .zip">
-          <button id="importUrlBtn">从 URL 导入</button>
-
-          <details class="script-example">
-            <summary>📝 查看脚本示例</summary>
-            <pre><code>/**
- * @name 示例新闻源
- * @version 1.0.0
- * @author Your Name
- * @description 示例：自定义新闻源脚本
- * @id example_news
- * @platforms example,news
- */
-
-// 必须导出 musicSdk 对象
-const musicSdk = {
-  // 音乐平台元信息
-  source: 'example',
-  name: '示例平台',
-  type: 1, // 1=音乐平台, 2=歌单平台
-  version: '1.0.0',
-
-  // 搜索歌曲
-  search(keyword, page, limit) {
-    return {
-      list: [], // {songid, name, singer, album, source}
-      total: 0
-    };
-  },
-
-  // 获取歌曲播放地址（可选）
-  getMusicUrl(song, quality) {
-    return { url: '' };
-  }
-};
-
-// 必须调用 lx.notifyInited() 通知初始化完成
-lx.notifyInited([musicSdk]);</code></pre>
-          </details>
-        </div>
-        <div id="sourceList" class="source-list"></div>
-      </section>
     </main>
 
     <div class="modal" id="detailModal">
