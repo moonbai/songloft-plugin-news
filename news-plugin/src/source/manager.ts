@@ -71,13 +71,30 @@ export class SourceManager {
    * 从 URL 导入 source
    */
   async importFromUrl(url: string): Promise<CustomSource | CustomSource[]> {
+    try {
+      new URL(url);
+    } catch {
+      throw new Error('无效的 URL');
+    }
+
+    const MAX_SIZE = 5 * 1024 * 1024;
     const resp = await fetch(url, { method: 'GET' });
+    if (!resp.ok) {
+      throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+    }
+
+    const contentLength = Number(resp.headers.get('content-length') || 0);
+    if (contentLength > MAX_SIZE) {
+      throw new Error('文件过大（超过 5MB）');
+    }
+
     const ab = await resp.arrayBuffer();
+    if (ab.byteLength > MAX_SIZE) {
+      throw new Error('文件过大（超过 5MB）');
+    }
     const data = new Uint8Array(ab);
 
-    // 检查是否为 ZIP
     if (data[0] === 0x50 && data[1] === 0x4b && data[2] === 0x03 && data[3] === 0x04) {
-      // ZIP 文件
       const zipName = url.split('/').pop()?.replace(/\.zip$/i, '') || 'zip_source';
       const sources = parseZipSource(zipName, data);
       for (const source of sources) {
@@ -91,8 +108,12 @@ export class SourceManager {
       this.persist();
       return sources;
     } else {
-      // JS 文件
       const content = new TextDecoder().decode(data);
+      try {
+        new Function(content);
+      } catch (e) {
+        throw new Error('脚本语法错误: ' + (e as Error).message);
+      }
       const name = url.split('/').pop()?.replace(/\.js$/i, '') || 'url_source';
       return this.importJs(name, content);
     }

@@ -55,7 +55,7 @@ export class RuntimeManager {
         name,
         inited: runtime.inited,
         platforms: runtime.getPlatforms(),
-        sources: runtime.sources,
+        sources: JSON.parse(JSON.stringify(runtime.sources)),
       });
     }
     return result;

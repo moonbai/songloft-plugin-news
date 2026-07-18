@@ -27,6 +27,22 @@ function filterByKeyword(items: NewsItem[], keyword: string): NewsItem[] {
   );
 }
 
+function normalizeHot(items: NewsItem[]): NewsItem[] {
+  if (items.length === 0) return items;
+  const maxHot = Math.max(...items.map(i => i.hot || 0));
+  if (maxHot <= 0) return items.map(i => ({ ...i, hotLevel: 0 }));
+  return items.map(i => {
+    const ratio = (i.hot || 0) / maxHot;
+    let hotLevel = 1;
+    if (ratio >= 0.9) hotLevel = 5;
+    else if (ratio >= 0.7) hotLevel = 4;
+    else if (ratio >= 0.5) hotLevel = 3;
+    else if (ratio >= 0.25) hotLevel = 2;
+    else hotLevel = 1;
+    return { ...i, hotLevel };
+  });
+}
+
 export function createSearchHandlers() {
   return {
     async search(req: unknown) {
@@ -57,7 +73,7 @@ export function createSearchHandlers() {
 
         const promises = sourceIds.map(async (sid) => {
           const news = await loadHotboardNews(sid, 50);
-          return filterByKeyword(news, keyword);
+          return normalizeHot(filterByKeyword(news, keyword));
         });
 
         const results = await Promise.all(promises);
@@ -66,7 +82,7 @@ export function createSearchHandlers() {
           allNews.push(...arr);
         }
 
-        allNews.sort((a, b) => (b.hot || 0) - (a.hot || 0));
+        allNews.sort((a, b) => ((b as any).hotLevel || 0) - ((a as any).hotLevel || 0));
 
         const start = (page - 1) * page_size;
         const pageData = allNews.slice(start, start + page_size);

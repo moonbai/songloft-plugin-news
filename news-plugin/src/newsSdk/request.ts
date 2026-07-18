@@ -25,11 +25,19 @@ function httpFetch(url: string, options: {
     const method = (options.method || 'GET').toUpperCase();
     const headers: Record<string, string> = { ...DEFAULT_HEADERS, ...(options.headers || {}) };
     const body = options.body as BodyInit | undefined;
+    const timeout = options.timeout || 15000;
 
-    fetch(url, { method, headers, body }).then(async (resp) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      controller.abort();
+      reject(new Error('Request timeout'));
+    }, timeout) as unknown as number;
+
+    fetch(url, { method, headers, body, signal: controller.signal }).then(async (resp) => {
+      clearTimeout(timer);
+
       const respHeaders: Record<string, string> = {};
       try {
-        // Headers.forEach 兼容模式
         const hdr = resp.headers as any;
         if (typeof hdr.forEach === 'function') {
           hdr.forEach((value: string, key: string) => {
@@ -47,7 +55,6 @@ function httpFetch(url: string, options: {
       const text = await resp.text();
       let bodyData: any = text;
 
-      // 自动 JSON 解析
       if (text) {
         const ct = respHeaders['content-type'] || '';
         const isJson = ct.includes('application/json') || ct.includes('text/json') || options.json;
@@ -76,6 +83,7 @@ function httpFetch(url: string, options: {
         raw: text,
       });
     }).catch((err) => {
+      clearTimeout(timer);
       reject(err);
     });
   });
