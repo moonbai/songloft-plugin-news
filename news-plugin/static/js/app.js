@@ -870,7 +870,7 @@ document.getElementById('searchBtn').addEventListener('click', async () => {
   const container = document.getElementById('searchResults');
   container.innerHTML = '<div class="empty">搜索中...</div>';
   
-  const result = await api('/search', {
+  const result = await api('/news/search', {
     method: 'POST',
     body: JSON.stringify({ keyword, source_id: sourceId, page: 1, page_size: 30 }),
   });

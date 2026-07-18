@@ -7,6 +7,7 @@ import { RuntimeManager } from './engine';
 import { SourceManager } from './source';
 import { sources, platformModules } from './newsSdk/facade';
 import { createSearchHandlers, createNewsHandlers, createSourceHandlers, createPlayerHandlers } from './handlers';
+import { hostSearchHandler, hostMusicUrlHandler } from './handlers/host';
 import { getAggregatedHotboard } from './aggregate';
 
 let router: ReturnType<typeof createRouter> | null = null;
@@ -40,9 +41,9 @@ function normalizeTitle(title: string): string {
 function setupRouter(): void {
   router = createRouter();
 
-  // 搜索
+  // 搜索（前端用 /api/news/search，宿主用 /api/search）
   const searchHandlers = createSearchHandlers();
-  router.post('/api/search', searchHandlers.search);
+  router.post('/api/news/search', searchHandlers.search);
   router.get('/api/sources', searchHandlers.getSources);
 
   // 新闻列表/详情/热榜
@@ -73,17 +74,8 @@ function setupRouter(): void {
   router.get('/api/player/tts-config', playerHandlers.getTtsConfig);
   router.post('/api/player/tts-config', playerHandlers.setTtsConfig);
   router.get('/api/player/playable', playerHandlers.getPlayableNews);
-  // 方案 A：接入宿主原生歌曲库
-  router.post('/api/player/register-song', playerHandlers.registerSong);
-  router.post('/api/player/register-batch', playerHandlers.registerBatch);
 
-  // 宿主原生搜索 + 播放 URL 解析（官方推荐接入方式）
-  // 宿主搜索框输入关键词 → POST /api/search
-  // 宿主播放时回调 → POST /api/music/url
-  router.post('/api/search', hostSearchHandler);
-  router.post('/api/music/url', hostMusicUrlHandler);
-
-  // 歌单列表（参考电台插件）
+  // 歌单列表（参考电台插件，前端通过 P.apiGet 调用）
   router.get('/api/playlists', async () => {
     const playlists = await songloft.playlists.list();
     const radioPlaylists = playlists.filter((p: any) => p.type === 'radio');
@@ -107,6 +99,12 @@ function setupRouter(): void {
     }
     return jsonResponse({ ok: true });
   });
+
+  // 宿主原生搜索 + 播放 URL 解析（官方推荐接入方式）
+  // 宿主搜索框输入关键词 → POST /api/search
+  // 宿主播放时回调 → POST /api/music/url
+  router.post('/api/search', hostSearchHandler);
+  router.post('/api/music/url', hostMusicUrlHandler);
 
   // 聚合接口 - 多平台热榜聚合（去重 + 归一化排序，带 TTL 缓存）
   router.get('/api/aggregate/hotboard', async (req) => {
@@ -193,13 +191,18 @@ function setupRouter(): void {
     }
 
     // 从完整路径中提取插件内部路径
-    // 宿主转发请求时路径格式: /api/v1/jsplugin/{entryPath}/api/...
-    // 我们需要去掉 /api/v1/jsplugin/{entryPath} 前缀，只保留内部路径
+    // 宿主转发请求时路径格式可能为:
+    //   /api/v1/jsplugin/{entryPath}/api/...  (主 API 前缀)
+    //   /jsplugin/{entryPath}/api/...         (简化前缀)
+    //   /api/...                              (已去除前缀)
+    // 统一用 lastIndexOf('/api/') 提取最后的 /api/... 部分
     let internalPath = req.path.split('?')[0];
-    const entryPrefix = `/api/v1/jsplugin/news`;
-    if (internalPath.startsWith(entryPrefix)) {
-      internalPath = internalPath.slice(entryPrefix.length);
+    const apiIdx = internalPath.lastIndexOf('/api/');
+    if (apiIdx > 0) {
+      internalPath = internalPath.slice(apiIdx);
     }
+
+    songloft.log.info('news plugin: ' + req.method + ' ' + req.path + ' -> ' + internalPath);
 
     const routedReq: HTTPRequest = {
       ...req,
