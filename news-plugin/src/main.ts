@@ -79,7 +79,7 @@ function setupRouter(): void {
   router.post('/api/player/tts-config', playerHandlers.setTtsConfig);
   router.get('/api/player/playable', playerHandlers.getPlayableNews);
 
-  // TTS 在线音频代理 - 调用百度TTS生成音频，避免前端跨域和浏览器兼容性问题
+  // TTS 在线音频 - 返回百度TTS音频URL，前端audio标签直接加载（不受CORS限制）
   router.get('/api/player/tts-audio', async (req) => {
     try {
       const query = parseQuery(req.query);
@@ -91,6 +91,7 @@ function setupRouter(): void {
       const ttsUrl = 'https://fanyi.baidu.com/gettts?lan=zh&text=' +
         encodeURIComponent(truncated) + '&spd=3&source=web';
 
+      // 先验证URL可达性（QuickJS fetch只支持text，不支持arrayBuffer）
       const resp = await fetch(ttsUrl, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
@@ -103,15 +104,13 @@ function setupRouter(): void {
         return jsonResponse({ code: 502, msg: 'TTS service unavailable' }, 502);
       }
 
-      const buffer = await resp.arrayBuffer();
-      return {
-        statusCode: 200,
-        headers: {
-          'Content-Type': 'audio/mpeg',
-          'Cache-Control': 'public, max-age=3600',
-        },
-        body: new Uint8Array(buffer),
-      };
+      // 消费body以释放连接，然后返回URL让前端直接加载
+      await resp.text();
+
+      return jsonResponse({
+        code: 0,
+        url: ttsUrl,
+      });
     } catch (e) {
       songloft.log.error('tts-audio error: ' + (e as Error).message);
       return jsonResponse({ code: 500, msg: 'TTS failed: ' + (e as Error).message }, 500);

@@ -276,27 +276,35 @@ class NewsPlayer {
   }
 
   /**
-   * 播放单段TTS音频（通过后端代理获取百度TTS音频）
+   * 播放单段TTS音频（通过后端获取百度TTS音频URL，audio标签直接加载）
    */
-  _playTtsChunk(text) {
-    return new Promise((resolve) => {
-      const url = API_BASE + '/player/tts-audio?text=' + encodeURIComponent(text);
-      this.audio.src = url;
-      this.audio.playbackRate = this.ttsConfig.rate || 1.0;
-      this.audio.volume = this.ttsConfig.volume || 1.0;
+  async _playTtsChunk(text) {
+    try {
+      const result = await api('/player/tts-audio?text=' + encodeURIComponent(text));
+      if (!result || result.code !== 0 || !result.url) {
+        return; // 跳过此段
+      }
 
-      const cleanup = () => {
-        this.audio.removeEventListener('ended', onEnd);
-        this.audio.removeEventListener('error', onErr);
-      };
-      const onEnd = () => { cleanup(); resolve(); };
-      const onErr = () => { cleanup(); resolve(); };
+      return new Promise((resolve) => {
+        this.audio.src = result.url;
+        this.audio.playbackRate = this.ttsConfig.rate || 1.0;
+        this.audio.volume = this.ttsConfig.volume || 1.0;
 
-      this.audio.addEventListener('ended', onEnd);
-      this.audio.addEventListener('error', onErr);
+        const cleanup = () => {
+          this.audio.removeEventListener('ended', onEnd);
+          this.audio.removeEventListener('error', onErr);
+        };
+        const onEnd = () => { cleanup(); resolve(); };
+        const onErr = () => { cleanup(); resolve(); };
 
-      this.audio.play().catch(() => { cleanup(); resolve(); });
-    });
+        this.audio.addEventListener('ended', onEnd);
+        this.audio.addEventListener('error', onErr);
+
+        this.audio.play().catch(() => { cleanup(); resolve(); });
+      });
+    } catch (e) {
+      console.warn('TTS chunk failed:', e);
+    }
   }
   
   _speakSegments(segments) {
