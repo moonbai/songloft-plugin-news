@@ -166,17 +166,7 @@ class NewsPlayer {
       // 优先使用音频
       await this._playAudio(this.currentItem.audioUrl);
     } else if (ttsEnabled) {
-      // 使用 TTS（需先确认浏览器支持 + 有可用语音）
-      const ok = await this._waitForVoices();
-      if (!ok) {
-        if (hasAudio) {
-          songloftToast && songloftToast('浏览器不支持 TTS，已切换音频播放', 'info');
-          await this._playAudio(this.currentItem.audioUrl);
-        } else {
-          songloftToast && songloftToast('当前浏览器不支持 TTS 朗读，请查看正文', 'info');
-        }
-        return;
-      }
+      // 使用在线 TTS（不依赖浏览器 TTS 能力）
       await this._playTts(this.currentItem);
     } else {
       songloftToast && songloftToast('该新闻暂不支持播放', 'info');
@@ -195,11 +185,6 @@ class NewsPlayer {
   }
   
   async _playTts(news) {
-    if (!this._ttsAvailable()) {
-      songloftToast && songloftToast('当前浏览器不支持 TTS 朗读', 'error');
-      return;
-    }
-
     try {
       // 获取 TTS 脚本（含 content）
       const result = await api('/player/resolve', {
@@ -221,10 +206,97 @@ class NewsPlayer {
       this.isPlaying = true;
       this._emit('play', { item: this.currentItem, mode: 'tts' });
 
-      await this._speakSegments(ttsScript);
+      // 优先使用在线TTS（百度TTS），失败回退到浏览器TTS
+      const textSegments = ttsScript.filter(s => s.type !== 'pause').map(s => s.text);
+      const onlineOk = await this._playOnlineTts(textSegments);
+
+      if (!onlineOk) {
+        // 回退到浏览器 speechSynthesis
+        if (this._ttsAvailable()) {
+          await this._speakSegments(ttsScript);
+        } else {
+          songloftToast && songloftToast('TTS 服务不可用', 'error');
+        }
+      }
     } catch (e) {
       songloftToast && songloftToast('TTS 失败: ' + (e && e.message ? e.message : String(e)), 'error');
     }
+  }
+
+  /**
+   * 在线 TTS 播放（通过后端代理百度TTS）
+   * 将文本分段，依次请求音频并播放
+   */
+  async _playOnlineTts(textSegments) {
+    try {
+      const fullText = textSegments.join(' ');
+      if (!fullText.trim()) return false;
+
+      // 按句子分段（每段不超过200字符，百度TTS限制）
+      const chunks = this._splitTextForTts(fullText, 200);
+      if (chunks.length === 0) return false;
+
+      for (const chunk of chunks) {
+        if (!chunk.trim()) continue;
+        if (!this.isPlaying) return true; // 已停止
+        await this._playTtsChunk(chunk);
+      }
+      return true;
+    } catch (e) {
+      console.warn('Online TTS failed:', e);
+      return false;
+    }
+  }
+
+  /**
+   * 将长文本按句子分割为TTS可处理的短段
+   */
+  _splitTextForTts(text, maxLen) {
+    const chunks = [];
+    const sentences = text.split(/([。！？\n.!?])/);
+    let current = '';
+    for (let i = 0; i < sentences.length; i++) {
+      const s = sentences[i];
+      if (current.length + s.length > maxLen) {
+        if (current) chunks.push(current);
+        if (s.length > maxLen) {
+          for (let j = 0; j < s.length; j += maxLen) {
+            chunks.push(s.slice(j, j + maxLen));
+          }
+          current = '';
+        } else {
+          current = s;
+        }
+      } else {
+        current += s;
+      }
+    }
+    if (current) chunks.push(current);
+    return chunks;
+  }
+
+  /**
+   * 播放单段TTS音频（通过后端代理获取百度TTS音频）
+   */
+  _playTtsChunk(text) {
+    return new Promise((resolve) => {
+      const url = API_BASE + '/player/tts-audio?text=' + encodeURIComponent(text);
+      this.audio.src = url;
+      this.audio.playbackRate = this.ttsConfig.rate || 1.0;
+      this.audio.volume = this.ttsConfig.volume || 1.0;
+
+      const cleanup = () => {
+        this.audio.removeEventListener('ended', onEnd);
+        this.audio.removeEventListener('error', onErr);
+      };
+      const onEnd = () => { cleanup(); resolve(); };
+      const onErr = () => { cleanup(); resolve(); };
+
+      this.audio.addEventListener('ended', onEnd);
+      this.audio.addEventListener('error', onErr);
+
+      this.audio.play().catch(() => { cleanup(); resolve(); });
+    });
   }
   
   _speakSegments(segments) {
@@ -359,7 +431,9 @@ class NewsPlayer {
    * 停止
    */
   _stop() {
+    this.isPlaying = false;
     this.audio.pause();
+    this.audio.removeAttribute('src');
     window.speechSynthesis && window.speechSynthesis.cancel();
   }
   
@@ -586,9 +660,8 @@ function formatHot(n) {
 
 function renderPlayActions(item) {
   const hasAudio = !!item.audioUrl;
-  // 朗读按钮仅在浏览器支持 TTS 且该条目允许 TTS 时显示
-  const ttsCapable = player && player._ttsAvailable();
-  const supportsTts = ttsCapable && item.ttsEnabled !== false;
+  // 朗读按钮始终显示（使用在线TTS，不依赖浏览器能力）
+  const supportsTts = item.ttsEnabled !== false;
 
   // 无音频且无 TTS 时不渲染整个按钮组（仅显示"查看正文"由列表点击触发）
   if (!hasAudio && !supportsTts) {

@@ -90,8 +90,13 @@ export function createPlayerHandlers() {
 
         if (!news) return badRequestResponse('news is required');
 
+        // 为空 id 生成 fallback，避免播放列表去重和移除失败
+        const itemId = news.id || crypto.md5(
+          (news.source || 'unknown') + ':' + (news.title || news.url || Date.now())
+        ).slice(0, 16);
+
         const item: PlaylistItem = {
-          id: news.id,
+          id: itemId,
           title: news.title,
           source: news.source,
           sourceName: news.sourceName,

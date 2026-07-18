@@ -79,6 +79,45 @@ function setupRouter(): void {
   router.post('/api/player/tts-config', playerHandlers.setTtsConfig);
   router.get('/api/player/playable', playerHandlers.getPlayableNews);
 
+  // TTS 在线音频代理 - 调用百度TTS生成音频，避免前端跨域和浏览器兼容性问题
+  router.get('/api/player/tts-audio', async (req) => {
+    try {
+      const query = parseQuery(req.query);
+      const text = String(query.text || '');
+      if (!text) return jsonResponse({ code: 400, msg: 'text is required' }, 400);
+
+      // 百度TTS单次限制约200字符，截断处理
+      const truncated = text.slice(0, 200);
+      const ttsUrl = 'https://fanyi.baidu.com/gettts?lan=zh&text=' +
+        encodeURIComponent(truncated) + '&spd=3&source=web';
+
+      const resp = await fetch(ttsUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Referer': 'https://fanyi.baidu.com/',
+        },
+      });
+
+      if (!resp.ok) {
+        songloft.log.error('TTS service returned: ' + resp.status);
+        return jsonResponse({ code: 502, msg: 'TTS service unavailable' }, 502);
+      }
+
+      const buffer = await resp.arrayBuffer();
+      return {
+        statusCode: 200,
+        headers: {
+          'Content-Type': 'audio/mpeg',
+          'Cache-Control': 'public, max-age=3600',
+        },
+        body: new Uint8Array(buffer),
+      };
+    } catch (e) {
+      songloft.log.error('tts-audio error: ' + (e as Error).message);
+      return jsonResponse({ code: 500, msg: 'TTS failed: ' + (e as Error).message }, 500);
+    }
+  });
+
   // 歌单列表（参考电台插件，前端通过 P.apiGet 调用）
   router.get('/api/playlists', async () => {
     const playlists = await songloft.playlists.list();
