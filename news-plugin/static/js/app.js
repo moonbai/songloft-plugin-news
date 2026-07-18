@@ -232,8 +232,8 @@ class NewsPlayer {
       const fullText = textSegments.join(' ');
       if (!fullText.trim()) return false;
 
-      // 按句子分段（每段不超过200字符，百度TTS限制）
-      const chunks = this._splitTextForTts(fullText, 200);
+      // 按句子分段（每段不超过400字符，有道TTS支持更长文本）
+      const chunks = this._splitTextForTts(fullText, 400);
       if (chunks.length === 0) return false;
 
       for (const chunk of chunks) {
@@ -599,32 +599,35 @@ function renderPlaylistSelect() {
   select.value = String(targetPlaylistId);
 }
 
-function createNewsPlaylist(name = '新闻资讯') {
-  return mainApiFetch('POST', '/playlists', { name: name, type: 'radio' });
+async function createNewsPlaylist(name = '新闻资讯') {
+  const result = await api('/playlists', {
+    method: 'POST',
+    body: JSON.stringify({ name, type: 'radio' }),
+  });
+  if (result.error) throw new Error(result.error);
+  return result.playlist;
 }
 
 async function importNewsToHost(newsItems) {
-  if (!P) throw new Error('宿主桥接不可用');
+  // 调用插件自己的批量注册接口，内部用 songloft.songs.create + playlists.addSongs
+  // 支持原生音频和TTS两种模式，TTS新闻通过 sourceData 携带信息
+  const result = await api('/player/register-batch', {
+    method: 'POST',
+    body: JSON.stringify({
+      newsList: newsItems,
+      playlistId: targetPlaylistId,
+    }),
+  });
 
-  const radios = newsItems.map(n => ({
-    url: n.audioUrl,
-    title: n.title,
-    artist: n.sourceName || n.author || n.source || '',
-    cover_url: n.cover || '',
-  }));
-
-  const songResult = await mainApiFetch('POST', '/songs/radio', radios);
-  const songIds = (songResult.songs || []).map(s => s.id);
-
-  if (songIds.length === 0) {
-    throw new Error('未创建任何歌曲');
+  if (result.code !== 0) {
+    throw new Error(result.msg || '导入失败');
   }
 
-  const playlistResult = await mainApiFetch('POST', `/playlists/${targetPlaylistId}/songs`, { song_ids: songIds });
+  const data = result.data || result;
   return {
-    created: songIds.length,
-    added: playlistResult.added || 0,
-    skipped: playlistResult.skipped || 0,
+    created: data.created || 0,
+    added: data.added || 0,
+    skipped: data.skippedCount || 0,
   };
 }
 

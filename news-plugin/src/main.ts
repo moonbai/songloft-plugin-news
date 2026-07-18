@@ -78,24 +78,26 @@ function setupRouter(): void {
   router.get('/api/player/tts-config', playerHandlers.getTtsConfig);
   router.post('/api/player/tts-config', playerHandlers.setTtsConfig);
   router.get('/api/player/playable', playerHandlers.getPlayableNews);
+  router.post('/api/player/register-song', playerHandlers.registerSong);
+  router.post('/api/player/register-batch', playerHandlers.registerBatch);
 
-  // TTS 在线音频 - 返回百度TTS音频URL，前端audio标签直接加载（不受CORS限制）
+  // TTS 在线音频 - 返回有道TTS音频URL，前端audio标签直接加载
+  // 有道TTS更稳定，无Referer限制，支持GET直接访问
   router.get('/api/player/tts-audio', async (req) => {
     try {
       const query = parseQuery(req.query);
       const text = String(query.text || '');
       if (!text) return jsonResponse({ code: 400, msg: 'text is required' }, 400);
 
-      // 百度TTS单次限制约200字符，截断处理
-      const truncated = text.slice(0, 200);
-      const ttsUrl = 'https://fanyi.baidu.com/gettts?lan=zh&text=' +
-        encodeURIComponent(truncated) + '&spd=3&source=web';
+      // 有道TTS单次限制约400字符，截断处理
+      const truncated = text.slice(0, 400);
+      const ttsUrl = 'https://dict.youdao.com/dictvoice?audio=' +
+        encodeURIComponent(truncated) + '&type=1';
 
-      // 先验证URL可达性（QuickJS fetch只支持text，不支持arrayBuffer）
+      // 验证URL可达性
       const resp = await fetch(ttsUrl, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          'Referer': 'https://fanyi.baidu.com/',
         },
       });
 
@@ -104,7 +106,6 @@ function setupRouter(): void {
         return jsonResponse({ code: 502, msg: 'TTS service unavailable' }, 502);
       }
 
-      // 消费body以释放连接，然后返回URL让前端直接加载
       await resp.text();
 
       return jsonResponse({
@@ -122,6 +123,19 @@ function setupRouter(): void {
     const playlists = await songloft.playlists.list();
     const radioPlaylists = playlists.filter((p: any) => p.type === 'radio');
     return jsonResponse({ playlists: radioPlaylists });
+  });
+
+  // 创建歌单
+  router.post('/api/playlists', async (req) => {
+    try {
+      const body = JSON.parse(req.body as unknown as string);
+      const name = String(body.name || '新闻资讯');
+      const type = (body.type as 'normal' | 'radio') || 'radio';
+      const playlist = await songloft.playlists.create({ name, type });
+      return jsonResponse({ playlist });
+    } catch (e) {
+      return jsonResponse({ error: (e as Error).message }, 500);
+    }
   });
 
   // 设置接口（参考电台插件）

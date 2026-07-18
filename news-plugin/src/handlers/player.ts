@@ -13,17 +13,36 @@ import type { NewsItem } from '../types';
 
 /**
  * 把 NewsItem 转成官方 songs.create 的入参
+ * 支持原生音频和TTS两种模式：
+ * - 原生音频：url 填 audioUrl
+ * - TTS模式：url 留空（或占位），sourceData 中标记 isTts + ttsText
+ *   宿主播放时会回调 /api/music/url，从 sourceData 解析出TTS文本生成URL
  */
 function newsToSongInput(news: NewsItem): CreateSongInput | null {
-  if (!news.audioUrl) return null;
+  if (!news || !news.id || !news.title) return null;
+
+  const isTts = !news.audioUrl;
+  const ttsText = news.title + '。' + (news.summary || '');
+  // 估算时长：中文约240字/分钟
+  const estimatedDuration = isTts ? Math.ceil(ttsText.length / 240 * 60) : (news.audioDuration || 0);
+
+  const sourceData = JSON.stringify({
+    newsId: news.id,
+    source: news.source,
+    sourceUrl: news.url,
+    isTts,
+    ttsText,
+  });
+
   return {
-    url: news.audioUrl,
+    // TTS模式url留空，宿主通过music/url回调获取真实播放地址
+    url: news.audioUrl || '',
     title: news.title,
     artist: news.sourceName || news.author || news.source,
     album: '新闻资讯',
     coverUrl: news.cover,
-    duration: news.audioDuration,
-    sourceData: JSON.stringify({ newsId: news.id, source: news.source, sourceUrl: news.url }),
+    duration: estimatedDuration,
+    sourceData,
     dedupKey: `${news.source}:${news.id}`,
   };
 }
@@ -237,8 +256,8 @@ export function createPlayerHandlers() {
     },
 
     /**
-     * 注册单条新闻音频到宿主歌曲库（方案 A）
-     * - news.audioUrl 必填
+     * 注册单条新闻到宿主歌曲库
+     * - 支持原生音频和TTS两种模式
      * - dedupKey 用 `${source}:${id}`，重复注册会复用同一 Song
      */
     async registerSong(req: HTTPRequest) {
@@ -250,12 +269,9 @@ export function createPlayerHandlers() {
         if (!news || !news.id || !news.title) {
           return badRequestResponse('news (with id and title) is required');
         }
-        if (!news.audioUrl) {
-          return badRequestResponse('news.audioUrl is required');
-        }
 
         const songInput = newsToSongInput(news);
-        if (!songInput) return badRequestResponse('invalid news audio');
+        if (!songInput) return badRequestResponse('invalid news');
 
         const songs: Song[] = await songloft.songs.create([songInput]);
         const song = songs[0];
@@ -264,7 +280,6 @@ export function createPlayerHandlers() {
         return successResponse({
           song,
           songId: song.id,
-          // 让前端能直接调用宿主播放
           playableUrl: song.url,
         });
       } catch (e) {
@@ -273,16 +288,18 @@ export function createPlayerHandlers() {
     },
 
     /**
-     * 批量注册可播放新闻到宿主歌曲库
+     * 批量注册新闻到宿主歌曲库
      * - 用于"一键加入歌单"场景
-     * - 自动跳过无 audioUrl 的新闻
-     * - 返回成功/跳过计数
+     * - 支持原生音频和TTS两种模式
+     * - 支持指定 playlistId 自动加入歌单
      */
     async registerBatch(req: HTTPRequest) {
       try {
         if (!req.body) return badRequestResponse('No body');
         const parsed = parseJsonBody(req.body);
         const newsList = (parsed.newsList || parsed.news || []) as NewsItem[];
+        const playlistId = parsed.playlistId ? Number(parsed.playlistId) : null;
+
         if (!Array.isArray(newsList) || newsList.length === 0) {
           return badRequestResponse('newsList is required and must be non-empty');
         }
@@ -294,21 +311,31 @@ export function createPlayerHandlers() {
             skipped.push({ id: n?.id || '', title: n?.title || '', reason: 'missing id/title' });
             continue;
           }
-          if (!n.audioUrl) {
-            skipped.push({ id: n.id, title: n.title, reason: 'no audioUrl' });
-            continue;
-          }
           const input = newsToSongInput(n);
           if (input) inputs.push(input);
+          else skipped.push({ id: n?.id || '', title: n?.title || '', reason: 'invalid' });
         }
 
         if (inputs.length === 0) {
-          return successResponse({ created: 0, skippedCount: skipped.length, skippedItems: skipped });
+          return successResponse({ created: 0, added: 0, skippedCount: skipped.length, skippedItems: skipped });
         }
 
         const songs: Song[] = await songloft.songs.create(inputs);
+        const songIds = songs.map(s => s.id);
+
+        let added = 0;
+        if (playlistId && songIds.length > 0) {
+          try {
+            const result = await songloft.playlists.addSongs(playlistId, songIds);
+            added = result.added;
+          } catch (e) {
+            songloft.log.error('add to playlist failed: ' + (e as Error).message);
+          }
+        }
+
         return successResponse({
           created: songs.length,
+          added,
           songs,
           skippedCount: skipped.length,
           skippedItems: skipped,

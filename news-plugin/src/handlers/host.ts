@@ -18,22 +18,25 @@ import type { SearchResultItem } from '@songloft/plugin-sdk';
 import { platformModules } from '../newsSdk/facade';
 import type { NewsItem } from '../types';
 
-// 只在这些源里搜可播放内容（有音频的）
-const PLAYABLE_SOURCES = ['ximalaya', 'dedao', 'weibo'];
+// 只在这些源里搜可播放内容（有音频的 + 支持TTS的）
+const PLAYABLE_SOURCES = ['ximalaya', 'dedao', 'weibo', 'zhihu', 'baidu', '36kr', 'ithome', 'huxiu', 'sspai', 'juejin'];
 
 interface NewsSourceData {
   source: string;
   newsId: string;
-  audioUrl: string;
+  audioUrl?: string;
   title: string;
   artist?: string;
   coverUrl?: string;
   duration?: number;
   sourceUrl?: string;
+  // TTS 专属字段
+  isTts?: boolean;
+  ttsText?: string;
 }
 
 /**
- * 加载某源的热榜（带音频的）
+ * 加载某源的热榜（所有新闻都支持TTS播放）
  */
 async function loadPlayableNews(sourceId: string, limit: number): Promise<NewsItem[]> {
   const module = platformModules[sourceId];
@@ -42,18 +45,24 @@ async function loadPlayableNews(sourceId: string, limit: number): Promise<NewsIt
     const boards = await module.hotboard.boards();
     if (boards.length === 0) return [];
     const result = await module.hotboard.list(boards[0].id, 1, limit);
-    return result.news.filter(n => !!n.audioUrl);
+    // 所有新闻都可以通过TTS播放，不再过滤audioUrl
+    return result.news;
   } catch {
     return [];
   }
 }
 
 function newsToSearchResult(n: NewsItem): SearchResultItem {
+  const isTts = !n.audioUrl;
+  const ttsText = n.title + '。' + (n.summary || '');
+  // 估算时长：中文约240字/分钟
+  const estimatedDuration = isTts ? Math.ceil(ttsText.length / 240 * 60) : (n.audioDuration || 0);
+
   return {
     title: n.title,
     artist: n.sourceName || n.author || n.source,
     album: '新闻资讯',
-    duration: n.audioDuration || 0,
+    duration: estimatedDuration,
     cover_url: n.cover,
     source_data: {
       source: n.source,
@@ -62,8 +71,10 @@ function newsToSearchResult(n: NewsItem): SearchResultItem {
       title: n.title,
       artist: n.sourceName || n.author || n.source,
       coverUrl: n.cover,
-      duration: n.audioDuration,
+      duration: estimatedDuration,
       sourceUrl: n.url,
+      isTts,
+      ttsText,
     } as NewsSourceData,
   };
 }
@@ -107,15 +118,30 @@ export const hostSearchHandler = createSearchHandler({
 export const hostMusicUrlHandler = createMusicUrlHandler({
   async resolveUrl(sourceData: Record<string, unknown>) {
     const sd = sourceData as NewsSourceData;
-    if (!sd || !sd.audioUrl) {
-      throw new Error('missing audioUrl in source_data');
+    if (!sd) {
+      throw new Error('missing source_data');
     }
-    // 新闻音频 URL 一般可直接访问，无需特殊 headers
-    return {
-      url: sd.audioUrl,
-      // 部分源可能需要 Referer，按 source 加（目前都不需要）
-      headers: sd.source === 'ximalaya' ? { Referer: 'https://www.ximalaya.com/' } : undefined,
-    };
+
+    // 有原生音频URL的，直接返回
+    if (sd.audioUrl) {
+      return {
+        url: sd.audioUrl,
+        headers: sd.source === 'ximalaya' ? { Referer: 'https://www.ximalaya.com/' } : undefined,
+      };
+    }
+
+    // TTS 新闻：生成有道TTS音频URL
+    if (sd.isTts && sd.ttsText) {
+      const text = sd.ttsText.slice(0, 400);
+      const ttsUrl = 'https://dict.youdao.com/dictvoice?audio=' +
+        encodeURIComponent(text) + '&type=1';
+      return {
+        url: ttsUrl,
+      };
+    }
+
+    // 没有音频也不是TTS的，返回错误
+    throw new Error('no audio available');
   },
   // 宿主下发 fallback hint 时，按标题在喜马拉雅搜
   async fallbackSearch(hint) {
