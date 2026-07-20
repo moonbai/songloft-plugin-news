@@ -1,0 +1,6 @@
+{
+  "name": "Mars 插件源",
+  "plugins": [
+    "https://github.com/moonbai/songloft-plugin-news/raw/main/news-plugin/plugin.json"
+  ]
+}
